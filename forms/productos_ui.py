@@ -128,7 +128,6 @@ class Ui_Form(object):
             boton_eliminar = QPushButton("Eliminar")
             boton_eliminar.setStyleSheet("background-color: #e00000; color: white; border-radius: 5px; padding: 4px;")
             boton_eliminar.setFixedSize(80, 30)
-            boton_eliminar.clicked.connect(self.cancelar)
 
             contenedor = QWidget()
             layout = QHBoxLayout(contenedor)
@@ -152,6 +151,7 @@ class Ui_Form(object):
         self.verticalLayout.insertWidget(1, self.widgetAgregarProducto)
         
         self.uiAgregarProducto.pushButton_2.clicked.connect(self.cancelar)
+        self.uiAgregarProducto.pushButton.clicked.connect(self.aceptar)
             
     def cancelar(self):
         if hasattr(self, 'widgetAgregarProducto'):
@@ -159,7 +159,7 @@ class Ui_Form(object):
             self.widgetAgregarProducto.deleteLater()
             del self.widgetAgregarProducto
     
-    def registrar_productos(self):
+    def aceptar(self):
         nombre = self.uiAgregarProducto.lineEditNombre.text()
         precio = self.uiAgregarProducto.lineEditPrecio.text()
         stock = self.uiAgregarProducto.lineEditStock.text()
@@ -167,6 +167,16 @@ class Ui_Form(object):
         descripcion = self.uiAgregarProducto.textEditDescripcion.toPlainText()
         
         conexion_db = conexion
+        
+        cursor = conexion_db.cursor()
+        
+        query = "INSERT INTO productos (nombre, precio, stock, proveedor, descripcion) VALUES (%s,%s,%s,%s,%s)"
+        cursor.execute(query(nombre, precio, stock, proveedor, descripcion))
+        
+        cursor.close()
+        conexion_db.close()
+        
+        
         
         
         
