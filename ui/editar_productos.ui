@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Form</class>
+ <widget class="QWidget" name="Form">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>723</width>
+    <height>106</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Form</string>
+  </property>
+  <layout class="QGridLayout" name="gridLayout">
+   <item row="0" column="0">
+    <widget class="QLabel" name="labelNombre">
+     <property name="text">
+      <string>Nombre:</string>
+     </property>
+    </widget>
+   </item>
+   <item row="0" column="1">
+    <widget class="QLineEdit" name="lineEditNombre"/>
+   </item>
+   <item row="0" column="2">
+    <widget class="QLabel" name="labelPrecio">
+     <property name="text">
+      <string>Precio:</string>
+     </property>
+    </widget>
+   </item>
+   <item row="0" column="3">
+    <widget class="QLineEdit" name="lineEditPrecio"/>
+   </item>
+   <item row="0" column="4">
+    <widget class="QLabel" name="labelStock">
+     <property name="text">
+      <string>Stock:</string>
+     </property>
+    </widget>
+   </item>
+   <item row="0" column="5" colspan="2">
+    <widget class="QLineEdit" name="lineEditStock"/>
+   </item>
+   <item row="1" column="0">
+    <widget class="QLabel" name="labelDescripcion">
+     <property name="text">
+      <string>Descripcion:</string>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="1" colspan="6">
+    <widget class="QLineEdit" name="lineEditDescripcion"/>
+   </item>
+   <item row="2" column="0">
+    <widget class="QLabel" name="labelProveedor">
+     <property name="text">
+      <string>Proveedor</string>
+     </property>
+    </widget>
+   </item>
+   <item row="2" column="1">
+    <widget class="QComboBox" name="comboBoxProveedor"/>
+   </item>
+   <item row="2" column="4" colspan="2">
+    <widget class="QPushButton" name="pushButtonGC">
+     <property name="text">
+      <string>Guardar cambios</string>
+     </property>
+    </widget>
+   </item>
+   <item row="2" column="6">
+    <widget class="QPushButton" name="pushButtonCancelar">
+     <property name="text">
+      <string>Cancelar</string>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

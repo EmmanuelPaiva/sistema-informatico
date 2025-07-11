@@ -1,12 +1,3 @@
-# -*- coding: utf-8 -*-
-
-################################################################################
-## Form generated from reading UI file 'menuPrincipal.ui'
-##
-## Created by: Qt User Interface Compiler version 6.9.0
-##
-## WARNING! All changes made in this file will be lost when recompiling UI file!
-################################################################################
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -22,10 +13,8 @@ from PySide6.QtWidgets import (QApplication, QFrame, QGridLayout, QHBoxLayout,
     QStatusBar, QVBoxLayout, QWidget, QStackedWidget)
 from forms.productos_ui import Ui_Form as Ui_Form
 from forms.Ventas import Ui_Form as VentasUiForm
-from forms.compras import Ui_Form as ComprasUiForm
+#from forms.compras import Ui_Form as ComprasUiForm
 from forms.Obras import Ui_Form as ObrasUiForm
-
-
 
 class senal(QLabel):
         clicked = Signal()
@@ -170,7 +159,8 @@ class Ui_MainWindow(object):
         QFrame{
             background-color: #f0f0f0;
             border: 1px solid rgb(200, 200, 200);
-        }                  """)
+        }                  
+        """)
         self.menuLateral.setStyleSheet("""
         QLabel{
            color: #2c3e50;
@@ -183,7 +173,7 @@ class Ui_MainWindow(object):
             border: 1px solid rgb(200, 200, 200);
             
         }  
-                       """)
+        """)
         self.label_7.setStyleSheet("""
         QLabel {
            color: #2c3e50;
@@ -191,7 +181,7 @@ class Ui_MainWindow(object):
            font-size: 20px;
            border: none;
            }
-                """)
+        """)
         self.label_8.setStyleSheet("""
         QLabel {
            color: #2c3e50;
@@ -199,7 +189,7 @@ class Ui_MainWindow(object):
            font-size: 14px;
            border-radius: 5px;
            }
-                """)
+        """)
         self.label_2 = senal(self.menuLateral)
         self.label_2.setObjectName(u"label_2")
         self.label_2.setCursor(Qt.PointingHandCursor)
@@ -256,7 +246,7 @@ class Ui_MainWindow(object):
         self.retranslateUi(MainWindow)
         self.label_2.clicked.connect(self.abrir_productos)
         self.label_3.clicked.connect(self.abrir_ventas)
-        self.label_4.clicked.connect(self.abrir_compras)
+        #self.label_4.clicked.connect(self.abrir_compras)
         self.label_5.clicked.connect(self.abrir_Obras) 
         self.label.clicked.connect(self.abrir_Empleados)
 
@@ -318,17 +308,17 @@ class Ui_MainWindow(object):
 
             self.stackedWidget.setCurrentWidget(self.paginaVentas)
     
-    def abrir_compras(self):
-        if hasattr(self, 'paginaCompras') and self.stackedWidget.currentWidget() == self.paginaCompras:
-            self.stackedWidget.setCurrentWidget(self.PaginaPincipal)
-        else:
-            if not hasattr(self, 'paginaCompras'):
-                self.paginaCompras = QWidget()
-                self.compras_ui = ComprasUiForm()
-                self.compras_ui.setupUi(self.paginaCompras)
-        
-                self.stackedWidget.addWidget(self.paginaCompras)
-            self.stackedWidget.setCurrentWidget(self.paginaCompras)
+    #def abrir_compras(self):
+    #    if hasattr(self, 'paginaCompras') and self.stackedWidget.currentWidget() == self.paginaCompras:
+    #        self.stackedWidget.setCurrentWidget(self.PaginaPincipal)
+    #    else:
+    #        if not hasattr(self, 'paginaCompras'):
+    #            self.paginaCompras = QWidget()
+    #            self.compras_ui = ComprasUiForm()
+    #            self.compras_ui.setupUi(self.paginaCompras)
+    #    
+    #            self.stackedWidget.addWidget(self.paginaCompras)
+    #        self.stackedWidget.setCurrentWidget(self.paginaCompras)
     
     def abrir_Obras(self):
         if hasattr (self, 'paginaObras') and self.stackedWidget.currentWidget() == self.paginaObras:
@@ -348,7 +338,7 @@ class Ui_MainWindow(object):
         else:
             if not hasattr(self, 'paginaCompras'):
                 self.paginaCompras = QWidget()
-                self.compras_ui = ComprasUiForm()
+                #self.compras_ui = ComprasUiForm()
                 self.compras_ui.setupUi(self.paginaCompras)
 
                 self.stackedWidget.addWidget(self.paginaCompras)
@@ -365,5 +355,4 @@ if __name__ == "__main__":
     sys.exit(app.exec())
     
     
-    #puto de mierda
 

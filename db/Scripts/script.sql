@@ -36,6 +36,9 @@ CREATE TABLE productos (
     costo_unitario decimal(10,2) NOT NULL,
     id_proveedor INTEGER REFERENCES proveedores(id_proveedor)
 );
+ALTER TABLE productos ALTER COLUMN categoria DROP NOT NULL;
+ALTER TABLE productos ALTER COLUMN costo_unitario DROP NOT NULL;
+ALTER TABLE productos ADD COLUMN descripcion varchar(50);
 
 create table ventas(
     id_venta serial primary key,
