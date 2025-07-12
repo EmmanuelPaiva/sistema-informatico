@@ -338,7 +338,7 @@ class Ui_MainWindow(object):
         else:
             if not hasattr(self, 'paginaCompras'):
                 self.paginaCompras = QWidget()
-                #self.compras_ui = ComprasUiForm()
+                #+self.compras_ui = ComprasUiForm()
                 self.compras_ui.setupUi(self.paginaCompras)
 
                 self.stackedWidget.addWidget(self.paginaCompras)
@@ -354,5 +354,5 @@ if __name__ == "__main__":
     MainWindow.show()
     sys.exit(app.exec())
     
-    
+
 
