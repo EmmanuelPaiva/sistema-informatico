@@ -1,217 +1,271 @@
-# -*- coding: utf-8 -*-
-
-################################################################################
-## Form generated from reading UI file 'Ventas.ui'
-##
-## Created by: Qt User Interface Compiler version 6.9.0
-##
-## WARNING! All changes made in this file will be lost when recompiling UI file!
-################################################################################
-
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from PySide6.QtCore import (QCoreApplication, QDate, QDateTime, QLocale,
     QMetaObject, QObject, QPoint, QRect,
-    QSize, QTime, QUrl, Qt)
+    QSize, QTime, QUrl, Qt, QPropertyAnimation)
 from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QFont, QFontDatabase, QGradient, QIcon,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide6.QtWidgets import (QApplication, QFrame, QGridLayout, QHBoxLayout,
-    QHeaderView, QLabel, QPushButton, QSizePolicy,
-    QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QApplication, QGridLayout, QHeaderView, QLabel,
+    QLineEdit, QPushButton, QSizePolicy, QTreeWidget, QTreeWidgetItem,
+    QWidget, QMainWindow, QComboBox, QSpinBox)
+from forms.formularioVentas import Ui_Form as nuevaVentaUi
+from db.conexion import conexion
+from db.ventas_queries import agrega_prodcuto_a_fila, agregar_filas, guardar_venta_en_db, cargar_ventas, actualizar_subtotal, actualizar_venta_en_db,buscar_ventas
+from utils.utilsVentas import  calcular_total_general, borrar_fila, toggle_subtabla
 
 class Ui_Form(object):
     def setupUi(self, Form):
         if not Form.objectName():
             Form.setObjectName(u"Form")
-        Form.resize(829, 539)
+        Form.resize(653, 475)
+                
         self.gridLayout = QGridLayout(Form)
-        self.gridLayout.setSpacing(0)
         self.gridLayout.setObjectName(u"gridLayout")
-        self.gridLayout.setContentsMargins(0, 0, 0, -1)
-        self.frame = QFrame(Form)
-        self.frame.setObjectName(u"frame")
-        self.frame.setFrameShape(QFrame.Shape.StyledPanel)
-        self.frame.setFrameShadow(QFrame.Shadow.Raised)
-        self.horizontalLayout_3 = QHBoxLayout(self.frame)
-        self.horizontalLayout_3.setSpacing(0)
-        self.horizontalLayout_3.setObjectName(u"horizontalLayout_3")
-        self.horizontalLayout_3.setContentsMargins(0, 0, 0, -1)
-        self.label_6 = QLabel(self.frame)
-        self.label_6.setObjectName(u"label_6")
+        
+        self.lineEdit = QLineEdit(Form)
+        self.lineEdit.setObjectName(u"lineEdit")
 
-        self.horizontalLayout_3.addWidget(self.label_6)
+        self.gridLayout.addWidget(self.lineEdit, 2, 0, 1, 1)
 
-        self.label_7 = QLabel(self.frame)
-        self.label_7.setObjectName(u"label_7")
+        self.pushButton_3 = QPushButton(Form)
+        self.pushButton_3.setObjectName(u"pushButton_3")
+        icon = QIcon(QIcon.fromTheme(QIcon.ThemeIcon.AddressBookNew))
+        self.pushButton_3.setIcon(icon)
 
-        self.horizontalLayout_3.addWidget(self.label_7)
+        self.gridLayout.addWidget(self.pushButton_3, 2, 2, 1, 1)
 
-
-        self.gridLayout.addWidget(self.frame, 0, 0, 1, 2)
-
-        self.frame_3 = QFrame(Form)
-        self.frame_3.setObjectName(u"frame_3")
-        self.frame_3.setFrameShape(QFrame.Shape.StyledPanel)
-        self.frame_3.setFrameShadow(QFrame.Shadow.Raised)
-        self.horizontalLayout = QHBoxLayout(self.frame_3)
-        self.horizontalLayout.setSpacing(0)
-        self.horizontalLayout.setObjectName(u"horizontalLayout")
-        self.horizontalLayout.setContentsMargins(0, 0, 0, -1)
-        self.label = QLabel(self.frame_3)
-        self.label.setObjectName(u"label")
-
-        self.horizontalLayout.addWidget(self.label)
-
-        self.pushButton = QPushButton(self.frame_3)
+        self.pushButton = QPushButton(Form)
         self.pushButton.setObjectName(u"pushButton")
 
-        self.horizontalLayout.addWidget(self.pushButton)
+        self.gridLayout.addWidget(self.pushButton, 0, 3, 1, 1)
+        
+        self.pushButton_2 = QPushButton(Form)
+        self.pushButton_2.setObjectName(u"pushButton_2")
 
+        self.gridLayout.addWidget(self.pushButton_2, 2, 3, 1, 1)
 
-        self.gridLayout.addWidget(self.frame_3, 2, 1, 1, 1)
+        self.label = QLabel(Form)
+        self.label.setObjectName(u"label")
 
-        self.frame_4 = QFrame(Form)
-        self.frame_4.setObjectName(u"frame_4")
-        sizePolicy = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.frame_4.sizePolicy().hasHeightForWidth())
-        self.frame_4.setSizePolicy(sizePolicy)
-        self.frame_4.setFrameShape(QFrame.Shape.StyledPanel)
-        self.frame_4.setFrameShadow(QFrame.Shadow.Raised)
-        self.verticalLayout_2 = QVBoxLayout(self.frame_4)
-        self.verticalLayout_2.setObjectName(u"verticalLayout_2")
-        self.verticalLayout_2.setContentsMargins(0, 0, 0, -1)
-        self.tableWidget = QTableWidget(self.frame_4)
-        if (self.tableWidget.columnCount() < 9):
-            self.tableWidget.setColumnCount(9)
-        __qtablewidgetitem = QTableWidgetItem()
-        self.tableWidget.setHorizontalHeaderItem(0, __qtablewidgetitem)
-        __qtablewidgetitem1 = QTableWidgetItem()
-        self.tableWidget.setHorizontalHeaderItem(1, __qtablewidgetitem1)
-        __qtablewidgetitem2 = QTableWidgetItem()
-        self.tableWidget.setHorizontalHeaderItem(2, __qtablewidgetitem2)
-        __qtablewidgetitem3 = QTableWidgetItem()
-        self.tableWidget.setHorizontalHeaderItem(3, __qtablewidgetitem3)
-        __qtablewidgetitem4 = QTableWidgetItem()
-        self.tableWidget.setHorizontalHeaderItem(4, __qtablewidgetitem4)
-        __qtablewidgetitem5 = QTableWidgetItem()
-        self.tableWidget.setHorizontalHeaderItem(5, __qtablewidgetitem5)
-        __qtablewidgetitem6 = QTableWidgetItem()
-        self.tableWidget.setHorizontalHeaderItem(6, __qtablewidgetitem6)
-        __qtablewidgetitem7 = QTableWidgetItem()
-        self.tableWidget.setHorizontalHeaderItem(7, __qtablewidgetitem7)
-        __qtablewidgetitem8 = QTableWidgetItem()
-        self.tableWidget.setHorizontalHeaderItem(8, __qtablewidgetitem8)
-        if (self.tableWidget.rowCount() < 9):
-            self.tableWidget.setRowCount(9)
-        __qtablewidgetitem9 = QTableWidgetItem()
-        self.tableWidget.setVerticalHeaderItem(0, __qtablewidgetitem9)
-        __qtablewidgetitem10 = QTableWidgetItem()
-        self.tableWidget.setVerticalHeaderItem(1, __qtablewidgetitem10)
-        __qtablewidgetitem11 = QTableWidgetItem()
-        self.tableWidget.setVerticalHeaderItem(2, __qtablewidgetitem11)
-        __qtablewidgetitem12 = QTableWidgetItem()
-        self.tableWidget.setVerticalHeaderItem(3, __qtablewidgetitem12)
-        __qtablewidgetitem13 = QTableWidgetItem()
-        self.tableWidget.setVerticalHeaderItem(4, __qtablewidgetitem13)
-        __qtablewidgetitem14 = QTableWidgetItem()
-        self.tableWidget.setVerticalHeaderItem(5, __qtablewidgetitem14)
-        __qtablewidgetitem15 = QTableWidgetItem()
-        self.tableWidget.setVerticalHeaderItem(6, __qtablewidgetitem15)
-        __qtablewidgetitem16 = QTableWidgetItem()
-        self.tableWidget.setVerticalHeaderItem(7, __qtablewidgetitem16)
-        __qtablewidgetitem17 = QTableWidgetItem()
-        self.tableWidget.setVerticalHeaderItem(8, __qtablewidgetitem17)
-        self.tableWidget.setObjectName(u"tableWidget")
-
-        self.verticalLayout_2.addWidget(self.tableWidget)
-
-
-        self.gridLayout.addWidget(self.frame_4, 3, 1, 1, 1)
-
-        self.frame_2 = QFrame(Form)
-        self.frame_2.setObjectName(u"frame_2")
-        self.frame_2.setFrameShape(QFrame.Shape.StyledPanel)
-        self.frame_2.setFrameShadow(QFrame.Shadow.Raised)
-        self.verticalLayout = QVBoxLayout(self.frame_2)
-        self.verticalLayout.setSpacing(0)
-        self.verticalLayout.setObjectName(u"verticalLayout")
-        self.verticalLayout.setContentsMargins(0, 0, 0, 0)
-        self.label_5 = QLabel(self.frame_2)
-        self.label_5.setObjectName(u"label_5")
-
-        self.verticalLayout.addWidget(self.label_5)
-
-        self.label_2 = QLabel(self.frame_2)
-        self.label_2.setObjectName(u"label_2")
-
-        self.verticalLayout.addWidget(self.label_2)
-
-        self.label_3 = QLabel(self.frame_2)
-        self.label_3.setObjectName(u"label_3")
-
-        self.verticalLayout.addWidget(self.label_3)
-
-        self.label_4 = QLabel(self.frame_2)
-        self.label_4.setObjectName(u"label_4")
-
-        self.verticalLayout.addWidget(self.label_4)
-
-
-        self.gridLayout.addWidget(self.frame_2, 1, 0, 3, 1)
+        self.gridLayout.addWidget(self.label, 0, 0, 1, 1)
 
 
         self.retranslateUi(Form)
+        
+        #TABLA
 
+        self.treeWidget = QTreeWidget(Form)
+        self.treeWidget.setObjectName(u"treeWidget")
+
+        self.gridLayout.addWidget(self.treeWidget, 3, 0, 1, 4)
+        
+        
+        
+        Form.resize(400, 600)
+        Form.setMinimumWidth(300)
+
+        self.treeWidget.setColumnCount(8)
+        self.treeWidget.setHeaderLabels(["ID","Fecha", "Cliente", "Cantidad", "Total","Medio","Factura","Opciones"])
+        self.treeWidget.setEditTriggers(QTreeWidget.NoEditTriggers)
+        self.treeWidget.setColumnHidden(0, True)
+        header = self.treeWidget.header()
+        header.setSectionResizeMode(QHeaderView.Stretch) 
+        
+        self.ui_nueva_venta = nuevaVentaUi()
+        self.ui_nueva_venta.setupUi(Form)
+        self.treeWidget.itemClicked.connect(lambda item, col: toggle_subtabla(item))        
+        self.lineEdit.textChanged.connect(lambda: buscar_ventas(ui, self.lineEdit.text(), Form))
+        
         QMetaObject.connectSlotsByName(Form)
+        
+        self.lista_productos = []
+        
+        #CONEXIONES
+        
+        self.pushButton.clicked.connect(lambda: self.abrir_formulario_nueva_venta(Form))
+        cargar_ventas(ui, Form)
+        
+        #ESTILOS
+        self.treeWidget.setStyleSheet("""
+            QTreeWidget {
+                background-color: #f0f0f0;
+                border: none;
+                gridline-color: transparent;
+                color: #2c3e50;
+                font-size: 14px;
+                border-bottom: 1px solid #dcdcdc;
+            }
+            QTreeWidget::item {
+                border-bottom: 1px solid #d0d0d0; 
+                
+            }
+            QHeaderView::section {
+                background-color: #f0f0f0;
+                color: #2c3e50;
+                font-weight: bold;
+                border: none;
+                border-bottom: 1px solid #d0d0d0;
+            }
+            
+        """)
+        self.pushButton.setStyleSheet("""
+            QPushButton {
+                padding: 6px 12px;
+                border: none;
+                background-color: #3498db;
+                border-radius: 5px;
+                color: white;
+            }
+        """)
+        self.label.setStyleSheet("""
+            QLabel {
+                margin: 0px;
+                padding: 0px;
+                color: #2c3e50;
+                font-size: 18px;
+                font-weight: bold;
+            }
+        """)
+        Form.setStyleSheet("""
+        QWidget {
+            background-color: #f0f0f0;
+        }
+        QLineEdit {
+           color: white;
+        }
+        QPushButton {
+                padding: 6px 12px;
+                border: none;
+                background-color: #3498db;
+                border-radius: 5px;
+                color: white;
+            }
+        """)  
+
+        
+         
     # setupUi
 
+
+    #FUNCIONES
     def retranslateUi(self, Form):
         Form.setWindowTitle(QCoreApplication.translate("Form", u"Form", None))
-        self.label_6.setText(QCoreApplication.translate("Form", u"TextLabel", None))
-        self.label_7.setText(QCoreApplication.translate("Form", u"TextLabel", None))
+        self.lineEdit.setText(QCoreApplication.translate("Form", u"Buscar venta", None))
+        self.pushButton_3.setText(QCoreApplication.translate("Form", u"Filtrar", None))
+        self.pushButton.setText(QCoreApplication.translate("Form", u"Nueva venta", None))
+        self.pushButton_2.setText(QCoreApplication.translate("Form", u"Exportar", None))
         self.label.setText(QCoreApplication.translate("Form", u"Ventas", None))
-        self.pushButton.setText(QCoreApplication.translate("Form", u"Nueva Venta", None))
-        ___qtablewidgetitem = self.tableWidget.horizontalHeaderItem(0)
-        ___qtablewidgetitem.setText(QCoreApplication.translate("Form", u"ID", None));
-        ___qtablewidgetitem1 = self.tableWidget.horizontalHeaderItem(1)
-        ___qtablewidgetitem1.setText(QCoreApplication.translate("Form", u"Producto", None));
-        ___qtablewidgetitem2 = self.tableWidget.horizontalHeaderItem(2)
-        ___qtablewidgetitem2.setText(QCoreApplication.translate("Form", u"Comprobante", None));
-        ___qtablewidgetitem3 = self.tableWidget.horizontalHeaderItem(3)
-        ___qtablewidgetitem3.setText(QCoreApplication.translate("Form", u"Nro. de comprobante", None));
-        ___qtablewidgetitem4 = self.tableWidget.horizontalHeaderItem(4)
-        ___qtablewidgetitem4.setText(QCoreApplication.translate("Form", u"Pago", None));
-        ___qtablewidgetitem5 = self.tableWidget.horizontalHeaderItem(5)
-        ___qtablewidgetitem5.setText(QCoreApplication.translate("Form", u"M\u00e9todo", None));
-        ___qtablewidgetitem6 = self.tableWidget.horizontalHeaderItem(6)
-        ___qtablewidgetitem6.setText(QCoreApplication.translate("Form", u"Total", None));
-        ___qtablewidgetitem7 = self.tableWidget.horizontalHeaderItem(7)
-        ___qtablewidgetitem7.setText(QCoreApplication.translate("Form", u"Fecha/hora", None));
-        ___qtablewidgetitem8 = self.tableWidget.horizontalHeaderItem(8)
-        ___qtablewidgetitem8.setText(QCoreApplication.translate("Form", u"Mas opciones", None));
-        ___qtablewidgetitem9 = self.tableWidget.verticalHeaderItem(0)
-        ___qtablewidgetitem9.setText(QCoreApplication.translate("Form", u"Nueva fila", None));
-        ___qtablewidgetitem10 = self.tableWidget.verticalHeaderItem(1)
-        ___qtablewidgetitem10.setText(QCoreApplication.translate("Form", u"Nueva fila", None));
-        ___qtablewidgetitem11 = self.tableWidget.verticalHeaderItem(2)
-        ___qtablewidgetitem11.setText(QCoreApplication.translate("Form", u"Nueva fila", None));
-        ___qtablewidgetitem12 = self.tableWidget.verticalHeaderItem(3)
-        ___qtablewidgetitem12.setText(QCoreApplication.translate("Form", u"Nueva fila", None));
-        ___qtablewidgetitem13 = self.tableWidget.verticalHeaderItem(4)
-        ___qtablewidgetitem13.setText(QCoreApplication.translate("Form", u"Nueva fila", None));
-        ___qtablewidgetitem14 = self.tableWidget.verticalHeaderItem(5)
-        ___qtablewidgetitem14.setText(QCoreApplication.translate("Form", u"Nueva fila", None));
-        ___qtablewidgetitem15 = self.tableWidget.verticalHeaderItem(6)
-        ___qtablewidgetitem15.setText(QCoreApplication.translate("Form", u"Nueva fila", None));
-        ___qtablewidgetitem16 = self.tableWidget.verticalHeaderItem(7)
-        ___qtablewidgetitem16.setText(QCoreApplication.translate("Form", u"Nueva fila", None));
-        ___qtablewidgetitem17 = self.tableWidget.verticalHeaderItem(8)
-        ___qtablewidgetitem17.setText(QCoreApplication.translate("Form", u"Nueva fila", None));
-        self.label_5.setText(QCoreApplication.translate("Form", u"TextLabel", None))
-        self.label_2.setText(QCoreApplication.translate("Form", u"TextLabel", None))
-        self.label_3.setText(QCoreApplication.translate("Form", u"TextLabel", None))
-        self.label_4.setText(QCoreApplication.translate("Form", u"TextLabel", None))
     # retranslateUi
 
+    def cancelar(self, Form):
+        if hasattr(self, 'formulario_nueva_venta'):
+            self.formulario_nueva_venta.close()
+        
+        ancho_formulario = 300
+        alto_formulario = Form.height()
+
+        self.anim = QPropertyAnimation(self.formulario_nueva_venta, b"geometry")
+        self.anim.setDuration(300)
+        self.anim.setStartValue(QRect(Form.width() - ancho_formulario, 0, ancho_formulario, alto_formulario))
+        self.anim.setEndValue(QRect(Form.width(), 0, ancho_formulario, alto_formulario))
+        self.anim.start()
+    
+    
+    
+    
+    
+    
+    # FORMULARIO DE VENTAS
+
+    def abrir_formulario_nueva_venta(self, Form, edicion = False):
+        if hasattr(self, 'formulario_nueva_venta') and self.formulario_nueva_venta.isVisible():
+          return  # ya está abierto
+        
+        self.ui_nueva_venta = nuevaVentaUi()
+        self.formulario_nueva_venta = QWidget(Form)  # o el contenedor principal
+        self.ui_nueva_venta.setupUi(self.formulario_nueva_venta)
+        
+        agregar_filas(self.ui_nueva_venta)
+        
+      
+        
+        ancho_formulario = 450 
+        alto_formulario = Form.height()
+
+
+        # Posición inicial fuera de pantalla (izquierda)
+        self.formulario_nueva_venta.setGeometry(Form.width(), 0, ancho_formulario, alto_formulario)
+        self.formulario_nueva_venta.show()
+
+        # Animación para deslizar
+        self.anim = QPropertyAnimation(self.formulario_nueva_venta, b"geometry")
+        self.anim.setDuration(300)
+        self.anim.setStartValue(QRect(Form.width(), 0, ancho_formulario, alto_formulario))
+        self.anim.setEndValue(QRect(Form.width() - ancho_formulario, 0, ancho_formulario, alto_formulario))
+        self.anim.start()
+        
+        if not edicion:
+            conexion_db = conexion()
+            cursor = conexion_db.cursor()
+            cursor.execute("SELECT id, nombre FROM clientes;")
+            clientes = cursor.fetchall()
+
+            for idC, nombreC in clientes:
+                self.ui_nueva_venta.comboBox.addItem(nombreC, idC)
+            if self.ui_nueva_venta.comboBox.count() > 0:
+                self.ui_nueva_venta.comboBox.setCurrentIndex(0)
+
+            cursor.close()
+            conexion_db.close()
+
+
+            cursor.close()
+            conexion_db.close()
+            
+            row_position = self.ui_nueva_venta.tableWidget.rowCount()
+            actualizar_subtotal(row_position, self.ui_nueva_venta)
+            calcular_total_general(self.ui_nueva_venta)
+            self.ui_nueva_venta.pushButtonAceptar.clicked.connect(lambda: guardar_venta_en_db(self.ui_nueva_venta, ui, Form))            
+
+
+        self.ui_nueva_venta.pushButtonAgregarProducto.clicked.connect(lambda: agrega_prodcuto_a_fila(self.ui_nueva_venta))
+        self.ui_nueva_venta.pushButtonCancelar.clicked.connect(lambda: self.cancelar(Form))
+        self.ui_nueva_venta.pushButtonQuitarProducto.clicked.connect(lambda: borrar_fila(self.ui_nueva_venta))
+        
+
+        
+        
+
+    
+
+
+class VentanaPrincipal(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.ui = Ui_Form()
+        self.ui.setupUi(self)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, 'formulario_nueva_venta'):
+            ancho_formulario = self.ui.formulario_nueva_venta.width()
+            alto_formulario = self.height()
+            self.ui.formulario_nueva_venta.setGeometry(
+                self.width() - ancho_formulario, 0,
+                ancho_formulario, alto_formulario
+            )
+            
+            
+
+if __name__ == "__main__":
+    import sys
+    app = QApplication(sys.argv)
+    Form = QWidget()
+    ui = Ui_Form()
+    ui.setupUi(Form)
+    Form.show()
+    sys.exit(app.exec())
+    

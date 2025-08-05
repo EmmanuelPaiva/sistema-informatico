@@ -217,3 +217,13 @@ class Ui_Form(object):
         ___qtablewidgetitem14.setText(QCoreApplication.translate("Form", u"Nueva fila", None));
     # retranslateUi
 
+if __name__ == "__main__":
+    import sys
+    app = QApplication(sys.argv)
+    Form = QWidget()
+    ui = Ui_Form()
+    ui.setupUi(Form)
+    Form.show()
+    sys.exit(app.exec())
+    
+    

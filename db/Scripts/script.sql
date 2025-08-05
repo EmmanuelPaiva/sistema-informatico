@@ -73,16 +73,73 @@ CREATE TABLE compras (
     id_proveedor INTEGER REFERENCES proveedores(id_proveedor),
     fecha DATE NOT NULL DEFAULT current_date,
     factura VARCHAR(50),
-    medio_pago VARCHAR(30),
-    estado VARCHAR(15) CHECK (estado IN ('pendiente', 'pagado')) NOT NULL
+    medio_pago  VARCHAR(30) NOT NULL,
+    total_compra  NUMERIC(12, 2) NOT NULL
 );
-CREATE TABLE compras_detalle (
+ALTER TABLE compras
+ADD COLUMN total_compra NUMERIC(12, 2);
+
+CREATE OR REPLACE FUNCTION actualizar_total_compra()
+RETURNS TRIGGER AS $$
+DECLARE
+    id_compra_actual INTEGER;
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        id_compra_actual := OLD.id_compra;
+    ELSE
+        id_compra_actual := NEW.id_compra;
+    END IF;
+
+    UPDATE compras
+    SET total_compra = (
+        SELECT COALESCE(SUM(subtotal), 0)
+        FROM compra_detalles
+        WHERE id_compra = id_compra_actual
+    )
+    WHERE id_compra = id_compra_actual;
+
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS tg_actualizar_total ON compra_detalles;
+
+CREATE TRIGGER tg_actualizar_total
+AFTER INSERT OR UPDATE OR DELETE ON compra_detalles
+FOR EACH ROW
+EXECUTE FUNCTION actualizar_total_compra();
+
+
+ALTER TABLE compras 
+DROP COLUMN IF EXISTS id_producto,
+DROP COLUMN IF EXISTS cantidad,
+DROP COLUMN IF EXISTS precio_unitario;
+
+CREATE TABLE compra_detalles (
     id_detalle SERIAL PRIMARY KEY,
-    id_compra INTEGER REFERENCES compras(id_compra),
-    id_producto INTEGER REFERENCES productos(id_producto),
-    cantidad INTEGER NOT NULL CHECK (cantidad > 0),
-    precio_unitario DECIMAL(10,2) NOT NULL
+    id_compra INTEGER NOT NULL REFERENCES compras(id_compra) ON DELETE CASCADE,
+    id_producto INTEGER NOT NULL REFERENCES productos(id_producto),
+    cantidad NUMERIC(10) NOT NULL CHECK (cantidad > 0),
+    precio_unitario NUMERIC(12, 2) NOT NULL CHECK (precio_unitario > 0),
+    subtotal NUMERIC(12, 2) GENERATED ALWAYS AS (cantidad * precio_unitario) STORED,
+    CONSTRAINT uk_compra_producto UNIQUE (id_compra, id_producto)
 );
+
+ALTER TABLE compra_detalles
+ALTER COLUMN cantidad TYPE INTEGER
+USING cantidad::INTEGER;
+
+ALTER TABLE compra_detalles
+ALTER COLUMN cantidad SET NOT NULL;
+
+ALTER TABLE compra_detalles
+ADD CONSTRAINT chk_cantidad_positiva CHECK (cantidad > 0);
+
+
+CREATE INDEX idx_compra_detalles_compra ON compra_detalles(id_compra);
+CREATE INDEX idx_compra_detalles_producto ON compra_detalles(id_producto);
+
+
 create table obras(
     id_obra serial primary key,
     id_cliente INTEGER REFERENCES clientes(id),
@@ -92,6 +149,15 @@ create table obras(
     fecha_fin date not null,
     responsable INTEGER references empleados(id),
     presupuesto decimal(15, 2) not null
+);
+CREATE TABLE productos_proveedores (
+    id SERIAL PRIMARY KEY,
+    id_producto INTEGER NOT NULL,
+    id_proveedor INTEGER NOT NULL,
+    precio_unitario NUMERIC(10, 2) NOT NULL,
+    CONSTRAINT fk_producto FOREIGN KEY (id_producto) REFERENCES productos(id_producto) ON DELETE CASCADE,
+    CONSTRAINT fk_proveedor FOREIGN KEY (id_proveedor) REFERENCES proveedores(id_proveedor) ON DELETE CASCADE,
+    CONSTRAINT unique_producto_proveedor UNIQUE (id_producto, id_proveedor)
 );
 
 create function insertar_cliente(

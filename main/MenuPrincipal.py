@@ -3,18 +3,18 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from PySide6.QtCore import (QCoreApplication, QDate, QDateTime, QLocale,
     QMetaObject, QObject, QPoint, QRect,
-    QSize, QTime, QUrl, Qt, Signal)
+    QSize, QTime, QUrl, Qt, Signal, QPropertyAnimation, QTimer)
 from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QFont, QFontDatabase, QGradient, QIcon,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
 from PySide6.QtWidgets import (QApplication, QFrame, QGridLayout, QHBoxLayout,
     QLabel, QMainWindow, QMenuBar, QSizePolicy,
-    QStatusBar, QVBoxLayout, QWidget, QStackedWidget)
+    QStatusBar, QVBoxLayout, QWidget, QStackedWidget,QPushButton)
 from forms.productos_ui import Ui_Form as Ui_Form
-from forms.Ventas import Ui_Form as VentasUiForm
-#from forms.compras import Ui_Form as ComprasUiForm
-from forms.Obras import Ui_Form as ObrasUiForm
+from forms.compras_ui import Ui_Form as ComprasUiForm
+from forms.Obras_ui import Ui_Form as ObrasUiForm
+from forms.ventas_ui import Ui_Form as ventasForm
 
 class senal(QLabel):
         clicked = Signal()
@@ -29,6 +29,7 @@ class Ui_MainWindow(object):
         if not MainWindow.objectName():
             MainWindow.setObjectName(u"MainWindow")
         MainWindow.resize(793, 531)
+        
         self.centralwidget = QWidget(MainWindow)
         self.centralwidget.setObjectName(u"centralwidget")
         self.gridLayout = QGridLayout(self.centralwidget)
@@ -136,8 +137,11 @@ class Ui_MainWindow(object):
         self.horizontalLayout_4.setObjectName(u"horizontalLayout_4")
         self.label_7 = QLabel(self.menualto)
         self.label_7.setObjectName(u"label_7")
+        self.botonOcultarMenu = QPushButton(self.menualto)
+        self.botonOcultarMenu.setText("Ocultar Menu")
 
         self.horizontalLayout_4.addWidget(self.label_7)
+        self.horizontalLayout_4.addWidget(self.botonOcultarMenu)
 
         self.label_8 = QLabel(self.menualto)
         self.label_8.setObjectName(u"label_8")
@@ -146,12 +150,21 @@ class Ui_MainWindow(object):
 
 
         self.horizontalLayout_3.addWidget(self.menualto)
-
+        
 
         self.gridLayout_2.addWidget(self.contenedorMenuAlto, 0, 0, 1, 3)
         self.menuLateral = QFrame(self.widget)
         self.menuLateral.setObjectName(u"menuLateral")
         self.menuLateral.setMaximumSize(QSize(180, 16777215))
+        
+        self.menuLateral.setMinimumWidth(0)
+        self.menuLateral.setMaximumWidth(200)
+
+        self.animation_sidebar = QPropertyAnimation(self.menuLateral, b"maximumWidth")
+        self.animation_sidebar.setDuration(200)
+        self.botonOcultarMenu.clicked.connect(self.hideMenuLateral)
+
+        
         self.verticalLayout = QVBoxLayout(self.menuLateral)
         self.verticalLayout.setObjectName(u"verticalLayout")
         
@@ -246,7 +259,7 @@ class Ui_MainWindow(object):
         self.retranslateUi(MainWindow)
         self.label_2.clicked.connect(self.abrir_productos)
         self.label_3.clicked.connect(self.abrir_ventas)
-        #self.label_4.clicked.connect(self.abrir_compras)
+        self.label_4.clicked.connect(self.abrir_compras)
         self.label_5.clicked.connect(self.abrir_Obras) 
         self.label.clicked.connect(self.abrir_Empleados)
 
@@ -269,8 +282,30 @@ class Ui_MainWindow(object):
 
         
         QMetaObject.connectSlotsByName(MainWindow)
-    # setupUi
+        
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, 'formulario_nueva_venta'):
+            ancho_formulario = self.formulario_nueva_venta.width()
+            alto_formulario = self.height()
+            self.formulario_nueva_venta.setGeometry(
+                self.width() - ancho_formulario, 0,
+                ancho_formulario, alto_formulario
+            )
+
     
+   # setupUi
+    def hideMenuLateral(self):
+        if self.menuLateral.maximumWidth() == 0:
+            self.animation_sidebar.setStartValue(0)
+            self.animation_sidebar.setEndValue(200)
+            self.animation_sidebar.start()
+        else:
+            self.animation_sidebar.setStartValue(self.menuLateral.maximumWidth())
+            self.animation_sidebar.setEndValue(0)
+            self.animation_sidebar.start()
+
+        
     def retranslateUi(self, MainWindow):
         MainWindow.setWindowTitle(QCoreApplication.translate("MainWindow", u"MainWindow", None))
         self.label_2.setText(QCoreApplication.translate("MainWindow", u"Productos", None))
@@ -281,8 +316,7 @@ class Ui_MainWindow(object):
         self.label_8.setText(QCoreApplication.translate("MainWindow", u"usuario", None))
         self.label.setText(QCoreApplication.translate("MainWindow", u"Empleados", None))
     # retranslateUi
-    
-    
+
     def abrir_productos(self):
         if hasattr(self, "paginaProductos") and self.stackedWidget.currentWidget() == self.paginaProductos:
             self.stackedWidget.setCurrentWidget(self.PaginaPincipal)
@@ -302,23 +336,23 @@ class Ui_MainWindow(object):
         else:
             if not hasattr(self, 'paginaVentas'): 
                 self.paginaVentas = QWidget()
-                self.ventas_ui = VentasUiForm()
-                self.ventas_ui.setupUi(self.paginaVentas)
+                self.ventasUi = ventasForm()
+                self.ventasUi.setupUi(self.paginaVentas)
                 self.stackedWidget.addWidget(self.paginaVentas)
 
             self.stackedWidget.setCurrentWidget(self.paginaVentas)
     
-    #def abrir_compras(self):
-    #    if hasattr(self, 'paginaCompras') and self.stackedWidget.currentWidget() == self.paginaCompras:
-    #        self.stackedWidget.setCurrentWidget(self.PaginaPincipal)
-    #    else:
-    #        if not hasattr(self, 'paginaCompras'):
-    #            self.paginaCompras = QWidget()
-    #            self.compras_ui = ComprasUiForm()
-    #            self.compras_ui.setupUi(self.paginaCompras)
-    #    
-    #            self.stackedWidget.addWidget(self.paginaCompras)
-    #        self.stackedWidget.setCurrentWidget(self.paginaCompras)
+    def abrir_compras(self):
+        if hasattr(self, 'paginaCompras') and self.stackedWidget.currentWidget() == self.paginaCompras:
+            self.stackedWidget.setCurrentWidget(self.PaginaPincipal)
+        else:
+            if not hasattr(self, 'paginaCompras'):
+                self.paginaCompras = QWidget()
+                self.compras_ui = ComprasUiForm()
+                self.compras_ui.setupUi(self.paginaCompras)
+        
+                self.stackedWidget.addWidget(self.paginaCompras)
+            self.stackedWidget.setCurrentWidget(self.paginaCompras)
     
     def abrir_Obras(self):
         if hasattr (self, 'paginaObras') and self.stackedWidget.currentWidget() == self.paginaObras:
@@ -338,12 +372,13 @@ class Ui_MainWindow(object):
         else:
             if not hasattr(self, 'paginaCompras'):
                 self.paginaCompras = QWidget()
-                #+self.compras_ui = ComprasUiForm()
+                self.compras_ui = ComprasUiForm()
                 self.compras_ui.setupUi(self.paginaCompras)
 
                 self.stackedWidget.addWidget(self.paginaCompras)
             self.stackedWidget.setCurrentWidget(self.paginaCompras)
-    
+            
+            
 import sys
 
 if __name__ == "__main__":
