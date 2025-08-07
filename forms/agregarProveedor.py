@@ -25,65 +25,58 @@ class Ui_Form(object):
         Form.resize(698, 282)
         self.gridLayout = QGridLayout(Form)
         self.gridLayout.setObjectName(u"gridLayout")
-        self.lineEditStock = QLineEdit(Form)
-        self.lineEditStock.setObjectName(u"lineEditStock")
+        self.lineEditTelefono = QLineEdit(Form)
+        self.lineEditTelefono.setObjectName(u"lineEditTelefono")
 
-        self.gridLayout.addWidget(self.lineEditStock, 2, 1, 1, 3)
+        self.gridLayout.addWidget(self.lineEditTelefono, 1, 1, 1, 3)
 
-        self.lineEditDescripcion = QLineEdit(Form)
-        self.lineEditDescripcion.setObjectName(u"lineEditDescripcion")
+        self.lineEditCorreo = QLineEdit(Form)
+        self.lineEditCorreo.setObjectName(u"lineEditCorreo")
 
-        self.gridLayout.addWidget(self.lineEditDescripcion, 1, 3, 1, 4)
+        self.gridLayout.addWidget(self.lineEditCorreo, 1, 6, 1, 2)
 
         self.pushButton = QPushButton(Form)
         self.pushButton.setObjectName(u"pushButton")
 
         self.gridLayout.addWidget(self.pushButton, 3, 6, 1, 1)
 
-        self.labelPrecio = QLabel(Form)
-        self.labelPrecio.setObjectName(u"labelPrecio")
-
-        self.gridLayout.addWidget(self.labelPrecio, 0, 0, 1, 2)
-
         self.labelNombre = QLabel(Form)
         self.labelNombre.setObjectName(u"labelNombre")
 
-        self.gridLayout.addWidget(self.labelNombre, 0, 5, 1, 1)
+        self.gridLayout.addWidget(self.labelNombre, 0, 0, 1, 2)
 
-        self.lineEditPrecio = QLineEdit(Form)
-        self.lineEditPrecio.setObjectName(u"lineEditPrecio")
+        self.labelDireccion = QLabel(Form)
+        self.labelDireccion.setObjectName(u"labelDireccion")
 
-        self.gridLayout.addWidget(self.lineEditPrecio, 0, 2, 1, 2)
+        self.gridLayout.addWidget(self.labelDireccion, 0, 5, 1, 1)
 
-        self.labelProveedor = QLabel(Form)
-        self.labelProveedor.setObjectName(u"labelProveedor")
+        self.lineEditDireccion = QLineEdit(Form)
+        self.lineEditDireccion.setObjectName(u"lineEditDireccion")
 
-        self.gridLayout.addWidget(self.labelProveedor, 2, 5, 1, 1)
+        self.gridLayout.addWidget(self.lineEditDireccion, 0, 2, 1, 2)
 
-        self.labelDescripcion = QLabel(Form)
-        self.labelDescripcion.setObjectName(u"labelDescripcion")
 
-        self.gridLayout.addWidget(self.labelDescripcion, 1, 0, 1, 3)
+        self.labelCorreo = QLabel(Form)
+        self.labelCorreo.setObjectName(u"labelCorreo")
+
+        self.gridLayout.addWidget(self.labelCorreo, 1, 4, 1, 2)
 
         self.lineEditNombre = QLineEdit(Form)
         self.lineEditNombre.setObjectName(u"lineEditNombre")
 
         self.gridLayout.addWidget(self.lineEditNombre, 0, 6, 1, 1)
 
-        self.comboBoxProveedore = QComboBox(Form)
-        self.comboBoxProveedore.setObjectName(u"comboBoxProveedore")
 
-        self.gridLayout.addWidget(self.comboBoxProveedore, 2, 6, 1, 1)
 
-        self.labelStock = QLabel(Form)
-        self.labelStock.setObjectName(u"labelStock")
+        self.labelTelefono = QLabel(Form)
+        self.labelTelefono.setObjectName(u"labelTelefono")
 
-        self.gridLayout.addWidget(self.labelStock, 2, 0, 1, 1)
+        self.gridLayout.addWidget(self.labelTelefono, 1, 0, 1, 1)
 
-        self.pushButton_2 = QPushButton(Form)
-        self.pushButton_2.setObjectName(u"pushButton_2")
+        self.pushButtonCancelar = QPushButton(Form)
+        self.pushButtonCancelar.setObjectName(u"pushButtonCancelar")
 
-        self.gridLayout.addWidget(self.pushButton_2, 3, 2, 1, 1)
+        self.gridLayout.addWidget(self.pushButtonCancelar, 3, 2, 1, 1)
 
 
         self.retranslateUi(Form)
@@ -141,12 +134,11 @@ class Ui_Form(object):
     def retranslateUi(self, Form):
         Form.setWindowTitle(QCoreApplication.translate("Form", u"Form", None))
         self.pushButton.setText(QCoreApplication.translate("Form", u"Aceptar", None))
-        self.labelPrecio.setText(QCoreApplication.translate("Form", u"Precio", None))
         self.labelNombre.setText(QCoreApplication.translate("Form", u"Nombre", None))
-        self.labelProveedor.setText(QCoreApplication.translate("Form", u"Proveedor", None))
-        self.labelDescripcion.setText(QCoreApplication.translate("Form", u"Descripcion", None))
-        self.labelStock.setText(QCoreApplication.translate("Form", u"Stock", None))
-        self.pushButton_2.setText(QCoreApplication.translate("Form", u"Cancelar", None))
+        self.labelDireccion.setText(QCoreApplication.translate("Form", u"Direccion", None))
+        self.labelCorreo.setText(QCoreApplication.translate("Form", u"Correo", None))
+        self.labelTelefono.setText(QCoreApplication.translate("Form", u"Telefono", None))
+        self.pushButtonCancelar.setText(QCoreApplication.translate("Form", u"Cancelar", None))
     # retranslateUi
 
 if __name__ == "__main__":

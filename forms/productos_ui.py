@@ -16,6 +16,8 @@ class Ui_Form(object):
         Form.setObjectName("Form")
         Form.resize(1000, 600)
         
+  
+        
         self.verticalLayout = QVBoxLayout(Form)
         self.verticalLayout.setContentsMargins(0, 0, 0, 0)
         self.verticalLayout.setSpacing(0)
@@ -28,35 +30,19 @@ class Ui_Form(object):
         self.frame.setStyleSheet("QFrame { border: none; padding: 0px; margin: 0px; background-color: #f0f0f0; }")
 
         self.horizontalLayout = QHBoxLayout(self.frame)
-        self.horizontalLayout.setContentsMargins(80,50, 50,50)
+        self.horizontalLayout.setContentsMargins(60,30, 50,50)
         self.horizontalLayout.setSpacing(0)
     
 
         self.label = QLabel(self.frame)
         self.label.setObjectName("label")
-        self.label.setStyleSheet("""
-            QLabel {
-                margin: 0px;
-                padding: 0px;
-                color: #2c3e50;
-                font-size: 18px;
-                font-weight: bold;
-            }
-        """)
+
 
         self.pushButton = QPushButton(self.frame)
         self.pushButton.setObjectName("pushButton")
         self.pushButton.setMinimumSize(80, 32)
         self.pushButton.setMaximumWidth(190)
-        self.pushButton.setStyleSheet("""
-            QPushButton {
-                padding: 6px 12px;
-                border: none;
-                background-color: #3498db;
-                border-radius: 5px;
-                color: white;
-            }
-        """)
+
         
         self.pushButton.clicked.connect(self.mostrar_formulario)
 
@@ -77,29 +63,7 @@ class Ui_Form(object):
         for col in range(6):
             header.setSectionResizeMode(col, QHeaderView.Stretch) 
         self.cargar_todos_los_productos()
-        self.tableWidget.setStyleSheet("""
-            QTableWidget {
-                background-color: #f0f0f0;
-                border: none;
-                gridline-color: transparent;
-                color: #2c3e50;
-                font-size: 14px;
-                border-bottom: 1px solid #dcdcdc;
-            }
-            QTableWidget::item {
-                border-bottom: 1px solid #d0d0d0; 
-                
-            }
-            QHeaderView::section {
-                background-color: #f0f0f0;
-                color: #2c3e50;
-                font-weight: bold;
-                border: none;
-                border-bottom: 1px solid #d0d0d0;
-            }
-            
-        """)
-        
+
         self.verticalLayout.addWidget(self.tableWidget)
 
         self.retranslateUi(Form)
