@@ -86,65 +86,95 @@ class Ui_Form(object):
         #CONEXIONES
         
         self.pushButton.clicked.connect(lambda: self.abrir_formulario_nueva_venta(Form))
-        cargar_ventas(ui, Form)
+        cargar_ventas(self, Form)
         
         #ESTILOS
-        self.treeWidget.setStyleSheet("""
-            QTreeWidget {
-                background-color: #f0f0f0;
-                border: none;
-                gridline-color: transparent;
-                color: #2c3e50;
-                font-size: 14px;
-                border-bottom: 1px solid #dcdcdc;
-            }
-            QTreeWidget::item {
-                border-bottom: 1px solid #d0d0d0; 
-                
-            }
-            QHeaderView::section {
-                background-color: #f0f0f0;
-                color: #2c3e50;
-                font-weight: bold;
-                border: none;
-                border-bottom: 1px solid #d0d0d0;
-            }
-            
-        """)
-        self.pushButton.setStyleSheet("""
-            QPushButton {
-                padding: 6px 12px;
-                border: none;
-                background-color: #3498db;
-                border-radius: 5px;
-                color: white;
-            }
-        """)
-        self.label.setStyleSheet("""
-            QLabel {
-                margin: 0px;
-                padding: 0px;
-                color: #2c3e50;
-                font-size: 18px;
-                font-weight: bold;
-            }
-        """)
         Form.setStyleSheet("""
-        QWidget {
-            background-color: #f0f0f0;
-        }
-        QLineEdit {
-           color: white;
-        }
-        QPushButton {
-                padding: 6px 12px;
-                border: none;
-                background-color: #3498db;
-                border-radius: 5px;
-                color: white;
+            QWidget {
+                font-family: Segoe UI, sans-serif;
+                font-size: 14px;
+                background-color: #f9fbfd;
             }
-        """)  
 
+            /* Controles */
+            QLineEdit, QDateTimeEdit, QComboBox {
+                padding: 8px;
+                border: 1px solid #b0c4de;
+                border-radius: 8px;
+                background-color: #ffffff;
+            }
+
+            QLineEdit:focus, QDateTimeEdit:focus, QComboBox:focus {
+                border: 1px solid #5dade2;
+                background-color: #eef7ff;
+            }
+
+            /* Botones */
+            QPushButton {
+                padding: 10px 18px;
+                background-color: #5dade2;
+                color: white;
+                font-weight: bold;
+                border-radius: 10px;
+                border: none;
+            }
+
+            QPushButton:hover {
+                background-color: #3498db;
+            }
+
+            QPushButton:pressed {
+                background-color: #2e86c1;
+            }
+
+            /* Labels */
+            QLabel {
+                font-weight: bold;
+                color: #2c3e50;
+            }
+
+            /* Tabla */
+            QTableWidget {
+                border: 1px solid #d6eaf8;
+                border-radius: 8px;
+                background-color: #ffffff;
+                gridline-color: #d0d0d0;
+            }
+
+            QTableWidget::item {
+                padding: 6px;
+                font-size: 12px;
+                color: #333333;
+                height: 40px;
+            }
+
+            QHeaderView::section {
+                background-color: #3498db;
+                color: white;
+                padding: 8px;
+                border: none;
+                font-size: 13px;
+            }
+
+            QTableCornerButton::section {
+                background-color: #3498db;
+            }
+
+            QScrollBar:vertical {
+                border: none;
+                background: #f0f0f0;
+                width: 8px;
+                margin: 0px;
+                border-radius: 4px;
+            }
+
+            QScrollBar::handle:vertical {
+                background: #a0c4ff;
+                min-height: 20px;
+                border-radius: 4px;
+            }
+        """)
+        
         
          
     # setupUi

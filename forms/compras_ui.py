@@ -90,7 +90,7 @@ class Ui_Form(object):
 
         QMetaObject.connectSlotsByName(Form)
         
-        setRowsTreeWidget(ui, Form)
+        setRowsTreeWidget(self, Form)
         
         
         Form.setStyleSheet("""

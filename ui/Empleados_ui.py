@@ -1,139 +1,315 @@
 # -*- coding: utf-8 -*-
-
-################################################################################
-## Form generated from reading UI file 'Empleados.ui'
-##
-## Created by: Qt User Interface Compiler version 6.9.0
-##
-## WARNING! All changes made in this file will be lost when recompiling UI file!
-################################################################################
-
-from PySide6.QtCore import (QCoreApplication, QDate, QDateTime, QLocale,
-    QMetaObject, QObject, QPoint, QRect,
-    QSize, QTime, QUrl, Qt)
-from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
-    QFont, QFontDatabase, QGradient, QIcon,
-    QImage, QKeySequence, QLinearGradient, QPainter,
-    QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide6.QtWidgets import (QApplication, QFrame, QGridLayout, QHBoxLayout,
-    QHeaderView, QLabel, QPushButton, QSizePolicy,
-    QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from PySide6.QtCore import (QCoreApplication, Qt, QMetaObject, QPropertyAnimation, QRect, QEvent, QObject)
+from PySide6.QtWidgets import (QApplication, QFrame, QGridLayout, QLabel, QLineEdit,
+                               QPushButton, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QTableWidget, QHeaderView)
+from forms.AgregarEmpleados import Ui_Form as FormularioEmpleados
+from db.clientes_queries import (
+    guardar_registro,
+    cargar_clientes,
+    buscar_clientes,
+    editar_cliente,
+    obtener_cliente_por_id,
+)
 
 class Ui_Form(object):
     def setupUi(self, Form):
         if not Form.objectName():
             Form.setObjectName(u"Form")
-        Form.resize(890, 549)
+        Form.resize(939, 672)
+        Form.setStyleSheet("""
+            QWidget {
+                background-color: white;
+                font-family: Arial;
+            }
+            QLineEdit {
+                border: none;
+                border-bottom: 2px solid #00bcd4;
+                padding: 4px;
+                color: #333;
+                min-height: 30px;
+                font-size: 14px;
+            }
+            QLineEdit:focus {
+                color: #000;
+            }
+            QPushButton {
+                background-color: #00bcd4;
+                color: white;
+                padding: 8px 16px;
+                min-height: 22px;
+                border-radius: 4px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #00acc1;
+            }
+            QLabel {
+                color: #00bcd4;
+                font-weight: bold;
+                font-size: 18px;
+            }
+            QTableWidget {
+                border: 1px solid #e0e0e0;
+                background-color: #ffffff;
+                font-size: 14px;
+                alternate-background-color: #f6f6f6;
+                gridline-color: #d0d0d0;
+                selection-background-color: #00bcd4;
+                selection-color: white;
+            }
+
+            QTableWidget::item {
+                padding: 8px;
+                border: none;
+                color: #333;
+            }
+
+            QTableWidget::item:selected {
+                background-color: #00acc1;
+                color: white;
+            }
+
+            QHeaderView::section {
+                background-color: #00bcd4;
+                color: white;
+                padding: 6px;
+                border: none;
+                font-weight: bold;
+                font-size: 14px;
+            }
+        """)
+
         self.gridLayout = QGridLayout(Form)
-        self.gridLayout.setObjectName(u"gridLayout")
-        self.frame_3 = QFrame(Form)
-        self.frame_3.setObjectName(u"frame_3")
-        self.frame_3.setMaximumSize(QSize(16777215, 60))
-        self.frame_3.setFrameShape(QFrame.Shape.StyledPanel)
-        self.frame_3.setFrameShadow(QFrame.Shadow.Raised)
-        self.horizontalLayout_2 = QHBoxLayout(self.frame_3)
-        self.horizontalLayout_2.setObjectName(u"horizontalLayout_2")
-        self.label_11 = QLabel(self.frame_3)
-        self.label_11.setObjectName(u"label_11")
+        self.gridLayout.setContentsMargins(10, 10, 10, 10)
+        self.gridLayout.setSpacing(10)
 
-        self.horizontalLayout_2.addWidget(self.label_11)
+        # ---- Header ----
+        self.header_frame = QFrame(Form)
+        self.header_frame.setFrameShape(QFrame.Shape.StyledPanel)
+        self.header_frame.setFrameShadow(QFrame.Shadow.Raised)
+        self.header_layout = QVBoxLayout(self.header_frame)
+        self.header_layout.setContentsMargins(0, 0, 0, 0)
+        self.header_layout.setSpacing(15)
 
-        self.pushButton = QPushButton(self.frame_3)
-        self.pushButton.setObjectName(u"pushButton")
+        # Title
+        self.label_title = QLabel(self.header_frame)
+        self.label_title.setText("Empleados")
+        self.header_layout.addWidget(self.label_title)
 
-        self.horizontalLayout_2.addWidget(self.pushButton)
+        # Search + Button aligned
+        self.search_layout = QHBoxLayout()
+        self.search_layout.setContentsMargins(0, 0, 0, 0)
+        self.search_layout.setSpacing(10)
 
+        self.lineEdit = QLineEdit(self.header_frame)
+        self.lineEdit.setPlaceholderText("Buscar por nombre o RUC/CI")
+        self.lineEdit.setMinimumWidth(int(Form.width() * 0.5))
+        self.lineEdit.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.search_layout.addWidget(self.lineEdit)
+        
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.search_layout.addWidget(spacer)
 
-        self.gridLayout.addWidget(self.frame_3, 0, 0, 1, 1)
+        self.newButton = QPushButton(self.header_frame)
+        self.newButton.setText("Nuevo empleado")
+        self.newButton.setFixedWidth(150)
+        self.newButton.setMinimumHeight(22)   
+        self.search_layout.addWidget(self.newButton)
+        self.newButton.clicked.connect(lambda: self.abrir_formulario(Form))
+        
+        self.header_layout.addLayout(self.search_layout)
+        self.gridLayout.addWidget(self.header_frame, 0, 0, 1, 1)
 
-        self.frame_4 = QFrame(Form)
-        self.frame_4.setObjectName(u"frame_4")
-        self.frame_4.setMaximumSize(QSize(16777215, 16777215))
-        self.frame_4.setFrameShape(QFrame.Shape.StyledPanel)
-        self.frame_4.setFrameShadow(QFrame.Shadow.Raised)
-        self.verticalLayout_2 = QVBoxLayout(self.frame_4)
-        self.verticalLayout_2.setObjectName(u"verticalLayout_2")
-        self.tableWidget = QTableWidget(self.frame_4)
-        if (self.tableWidget.columnCount() < 9):
-            self.tableWidget.setColumnCount(9)
-        __qtablewidgetitem = QTableWidgetItem()
-        self.tableWidget.setHorizontalHeaderItem(0, __qtablewidgetitem)
-        __qtablewidgetitem1 = QTableWidgetItem()
-        self.tableWidget.setHorizontalHeaderItem(1, __qtablewidgetitem1)
-        __qtablewidgetitem2 = QTableWidgetItem()
-        self.tableWidget.setHorizontalHeaderItem(2, __qtablewidgetitem2)
-        __qtablewidgetitem3 = QTableWidgetItem()
-        self.tableWidget.setHorizontalHeaderItem(3, __qtablewidgetitem3)
-        __qtablewidgetitem4 = QTableWidgetItem()
-        self.tableWidget.setHorizontalHeaderItem(4, __qtablewidgetitem4)
-        __qtablewidgetitem5 = QTableWidgetItem()
-        self.tableWidget.setHorizontalHeaderItem(5, __qtablewidgetitem5)
-        __qtablewidgetitem6 = QTableWidgetItem()
-        self.tableWidget.setHorizontalHeaderItem(6, __qtablewidgetitem6)
-        __qtablewidgetitem7 = QTableWidgetItem()
-        self.tableWidget.setHorizontalHeaderItem(7, __qtablewidgetitem7)
-        __qtablewidgetitem8 = QTableWidgetItem()
-        self.tableWidget.setHorizontalHeaderItem(8, __qtablewidgetitem8)
-        if (self.tableWidget.rowCount() < 6):
-            self.tableWidget.setRowCount(6)
-        __qtablewidgetitem9 = QTableWidgetItem()
-        self.tableWidget.setVerticalHeaderItem(0, __qtablewidgetitem9)
-        __qtablewidgetitem10 = QTableWidgetItem()
-        self.tableWidget.setVerticalHeaderItem(1, __qtablewidgetitem10)
-        __qtablewidgetitem11 = QTableWidgetItem()
-        self.tableWidget.setVerticalHeaderItem(2, __qtablewidgetitem11)
-        __qtablewidgetitem12 = QTableWidgetItem()
-        self.tableWidget.setVerticalHeaderItem(3, __qtablewidgetitem12)
-        __qtablewidgetitem13 = QTableWidgetItem()
-        self.tableWidget.setVerticalHeaderItem(4, __qtablewidgetitem13)
-        __qtablewidgetitem14 = QTableWidgetItem()
-        self.tableWidget.setVerticalHeaderItem(5, __qtablewidgetitem14)
-        self.tableWidget.setObjectName(u"tableWidget")
+        # ---- Table ----
+        self.table_frame = QFrame(Form)
+        self.table_frame.setFrameShape(QFrame.Shape.StyledPanel)
+        self.table_frame.setFrameShadow(QFrame.Shadow.Raised)
 
-        self.verticalLayout_2.addWidget(self.tableWidget)
+        self.verticalLayout = QVBoxLayout(self.table_frame)
+        self.verticalLayout.setContentsMargins(0, 0, 0, 0)
 
+        self.tableWidget = QTableWidget(self.table_frame)
+        self.tableWidget.setObjectName("tableWidget")
+        self.tableWidget.verticalHeader().setVisible(False)
+        self.tableWidget.setColumnCount(6)
+        self.tableWidget.setHorizontalHeaderLabels(["ID", "Nombre", "Teléfono", "CI/RUC", "Email", "Opciones"])
+        header = self.tableWidget.horizontalHeader()
+        header.setStretchLastSection(True)
+        for col in range(self.tableWidget.columnCount()):
+            header.setSectionResizeMode(col, QHeaderView.Stretch)
+        self.verticalLayout.addWidget(self.tableWidget)
 
-        self.gridLayout.addWidget(self.frame_4, 1, 0, 1, 1)
+        self.gridLayout.addWidget(self.table_frame, 1, 0, 1, 1)
 
+        # Conectar búsqueda en tiempo real
+        self.lineEdit.textChanged.connect(
+            lambda text: buscar_clientes(text, self.tableWidget, edit_callback=self.abrir_formulario_editar, main_form_widget=Form)
+        )
+
+        # Cargar clientes inicialmente (pasa el callback de edición y el widget Form)
+        cargar_clientes(self.tableWidget, edit_callback=self.abrir_formulario_editar, main_form_widget=Form)
 
         self.retranslateUi(Form)
-
         QMetaObject.connectSlotsByName(Form)
-    # setupUi
 
     def retranslateUi(self, Form):
-        Form.setWindowTitle(QCoreApplication.translate("Form", u"Form", None))
-        self.label_11.setText(QCoreApplication.translate("Form", u"TextLabel", None))
-        self.pushButton.setText(QCoreApplication.translate("Form", u"PushButton", None))
-        ___qtablewidgetitem = self.tableWidget.horizontalHeaderItem(0)
-        ___qtablewidgetitem.setText(QCoreApplication.translate("Form", u"Nueva columna", None));
-        ___qtablewidgetitem1 = self.tableWidget.horizontalHeaderItem(1)
-        ___qtablewidgetitem1.setText(QCoreApplication.translate("Form", u"Nueva columna", None));
-        ___qtablewidgetitem2 = self.tableWidget.horizontalHeaderItem(2)
-        ___qtablewidgetitem2.setText(QCoreApplication.translate("Form", u"Nueva columna", None));
-        ___qtablewidgetitem3 = self.tableWidget.horizontalHeaderItem(3)
-        ___qtablewidgetitem3.setText(QCoreApplication.translate("Form", u"Nueva columna", None));
-        ___qtablewidgetitem4 = self.tableWidget.horizontalHeaderItem(4)
-        ___qtablewidgetitem4.setText(QCoreApplication.translate("Form", u"Nueva columna", None));
-        ___qtablewidgetitem5 = self.tableWidget.horizontalHeaderItem(5)
-        ___qtablewidgetitem5.setText(QCoreApplication.translate("Form", u"Nueva columna", None));
-        ___qtablewidgetitem6 = self.tableWidget.horizontalHeaderItem(6)
-        ___qtablewidgetitem6.setText(QCoreApplication.translate("Form", u"Nueva columna", None));
-        ___qtablewidgetitem7 = self.tableWidget.horizontalHeaderItem(7)
-        ___qtablewidgetitem7.setText(QCoreApplication.translate("Form", u"Nueva columna", None));
-        ___qtablewidgetitem8 = self.tableWidget.horizontalHeaderItem(8)
-        ___qtablewidgetitem8.setText(QCoreApplication.translate("Form", u"Nueva columna", None));
-        ___qtablewidgetitem9 = self.tableWidget.verticalHeaderItem(0)
-        ___qtablewidgetitem9.setText(QCoreApplication.translate("Form", u"Nueva fila", None));
-        ___qtablewidgetitem10 = self.tableWidget.verticalHeaderItem(1)
-        ___qtablewidgetitem10.setText(QCoreApplication.translate("Form", u"Nueva fila", None));
-        ___qtablewidgetitem11 = self.tableWidget.verticalHeaderItem(2)
-        ___qtablewidgetitem11.setText(QCoreApplication.translate("Form", u"Nueva fila", None));
-        ___qtablewidgetitem12 = self.tableWidget.verticalHeaderItem(3)
-        ___qtablewidgetitem12.setText(QCoreApplication.translate("Form", u"Nueva fila", None));
-        ___qtablewidgetitem13 = self.tableWidget.verticalHeaderItem(4)
-        ___qtablewidgetitem13.setText(QCoreApplication.translate("Form", u"Nueva fila", None));
-        ___qtablewidgetitem14 = self.tableWidget.verticalHeaderItem(5)
-        ___qtablewidgetitem14.setText(QCoreApplication.translate("Form", u"Nueva fila", None));
-    # retranslateUi
+        Form.setWindowTitle(QCoreApplication.translate("Form", u"Clientes", None))
+        
+    def cancelar(self, Form):
+        if hasattr(self, 'formularioCliente') and self.formularioEmpleados.isVisible():
+            self.formularioEmpleados.close()
+        
+        # Reagregamos header y tabla en su posición por si fueron movidos
+        try:
+            self.gridLayout.removeWidget(self.header_frame)
+            self.gridLayout.removeWidget(self.table_frame)
+        except Exception:
+            pass
 
+        try:
+            self.gridLayout.addWidget(self.header_frame, 0, 0, 1, 1)
+            self.gridLayout.addWidget(self.table_frame, 1, 0, 1, 1)
+        except Exception:
+            pass
+        
+    def abrir_formulario(self, Form):
+        # Evitar abrir múltiples formularios
+        if hasattr(self, 'formularioCliente') and self.formularioCliente.isVisible():
+            return
+
+        self.ui_nuevo_empleados = FormularioEmpleados()
+        self.formularioEmpleados = QWidget()
+        self.ui_nuevo_cliente.setupUi(self.formularioEmpleados)
+
+        self.formularioEmpleados.setParent(Form)
+        self.formularioEmpleados.show()
+        
+        # Reordenar layout para mostrar formulario
+        try:
+            self.gridLayout.removeWidget(self.header_frame)
+            self.gridLayout.removeWidget(self.table_frame)
+        except Exception:
+            pass
+
+        self.gridLayout.addWidget(self.header_frame, 1, 0, 1, 1)
+        self.gridLayout.addWidget(self.formularioEmpleados, 0, 0, 1, 1)
+        self.gridLayout.addWidget(self.table_frame, 2, 0, 1, 1)
+        
+        # Ajustes de tamaño y animación
+        def ajustar_formulario():
+            ancho_formulario = Form.width()
+            alto_formulario = int(Form.height() * 0.40)
+            self.formularioEmpleados.setGeometry(0, 0, ancho_formulario, alto_formulario)
+
+        ajustar_formulario()
+
+        ancho_formulario = Form.width()
+        alto_formulario = int(Form.height() * 0.40)
+
+        self.formularioEmpleados.setGeometry(0, -alto_formulario, ancho_formulario, alto_formulario)
+        self.anim = QPropertyAnimation(self.formularioEmpleados, b"geometry")
+        self.anim.setDuration(300)
+        self.anim.setStartValue(QRect(0, -alto_formulario, ancho_formulario, alto_formulario))
+        self.anim.setEndValue(QRect(0, 0, ancho_formulario, alto_formulario))
+        self.anim.start()
+
+        # Reajustar el formulario si el Form cambia de tamaño
+        self.resize_filter = ResizeHandler(Form, self.formularioEmpleados)
+        Form.installEventFilter(self.resize_filter)
+        
+        # Conectar botones del formulario recién creado
+        # Asumo que en forms.AgregarClientes los botones se llaman pushButton (guardar) y pushButtonCancelar
+        self.ui_nuevo_cliente.pushButtonCancelar.clicked.connect(lambda: self.cancelar(Form))
+        self.ui_nuevo_cliente.pushButtonAceptar.clicked.connect(
+            lambda: guardar_registro(self.ui_nuevo_cliente, self.formularioEmpleados, self.tableWidget, self.abrir_formulario_editar, Form)
+        )
+
+    def abrir_formulario_editar(self, Form, id_cliente):
+        # Cerrar cualquier formulario abierto y abrir uno nuevo pre-llenado
+        if hasattr(self, 'formularioCliente') and self.formularioEmpleados.isVisible():
+            self.formularioEmpleados.close()
+
+        self.ui_nuevo_cliente = FormularioEmpleados()
+        self.formularioEmpleados = QWidget()
+        self.ui_nuevo_cliente.setupUi(self.formularioEmpleados)
+
+        self.formularioEmpleados.setParent(Form)
+        self.formularioEmpleados.show()
+
+        # Reordenar layout
+        try:
+            self.gridLayout.removeWidget(self.header_frame)
+            self.gridLayout.removeWidget(self.table_frame)
+        except Exception:
+            pass
+
+        self.gridLayout.addWidget(self.header_frame, 1, 0, 1, 1)
+        self.gridLayout.addWidget(self.formularioEmpleados, 0, 0, 1, 1)
+        self.gridLayout.addWidget(self.table_frame, 2, 0, 1, 1)
+
+        # Ajustes y animación
+        def ajustar_formulario():
+            ancho_formulario = Form.width()
+            alto_formulario = int(Form.height() * 0.40)
+            self.formularioEmpleados.setGeometry(0, 0, ancho_formulario, alto_formulario)
+
+        ajustar_formulario()
+
+        ancho_formulario = Form.width()
+        alto_formulario = int(Form.height() * 0.40)
+
+        self.formularioEmpleados.setGeometry(0, -alto_formulario, ancho_formulario, alto_formulario)
+        self.anim = QPropertyAnimation(self.formularioEmpleados, b"geometry")
+        self.anim.setDuration(300)
+        self.anim.setStartValue(QRect(0, -alto_formulario, ancho_formulario, alto_formulario))
+        self.anim.setEndValue(QRect(0, 0, ancho_formulario, alto_formulario))
+        self.anim.start()
+
+        # Reajustar el formulario si el Form cambia de tamaño
+        self.resize_filter = ResizeHandler(Form, self.formularioEmpleados)
+        Form.installEventFilter(self.resize_filter)
+
+        # Cargar datos del cliente y setear en los campos
+        cliente = obtener_cliente_por_id(id_cliente)
+        if cliente:
+            # cliente expected: (id, nombre, email, telefono, ruc_ci)
+            _, nombre, email, telefono, ruc_ci = cliente
+            # Ajustar campos según los nombres del form
+            self.ui_nuevo_cliente.lineEditNombre.setText(nombre)
+            self.ui_nuevo_cliente.lineEditRuc_Ci.setText(str(ruc_ci) if ruc_ci is not None else "")
+            self.ui_nuevo_cliente.lineEditTelefono.setText(str(telefono) if telefono is not None else "")
+            self.ui_nuevo_cliente.lineEditCorreo.setText(email if email is not None else "")
+
+        # Conectar botones: cancelar y guardar (que llamará a editar_cliente)
+        self.ui_nuevo_cliente.pushButtonCancelar.clicked.connect(lambda: self.cancelar(Form))
+        self.ui_nuevo_cliente.pushButtonAceptar.clicked.connect(
+            lambda: editar_cliente(self.ui_nuevo_cliente, self.tableWidget, id_cliente, self.formularioEmpleados, self.abrir_formulario_editar, Form)
+        )
+
+
+class ResizeHandler(QObject):
+    def __init__(self, form, widget):
+        super().__init__()
+        self.form = form
+        self.widget = widget
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Resize:
+            ancho = self.form.width()
+            alto = int(self.form.height() * 0.40)
+            self.widget.setGeometry(0, 0, ancho, alto)
+        return False
+
+
+if __name__ == "__main__":
+    import sys
+    app = QApplication(sys.argv)
+    Form = QWidget()
+    ui = Ui_Form()
+    ui.setupUi(Form)
+    Form.show()
+    sys.exit(app.exec())

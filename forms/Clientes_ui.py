@@ -5,15 +5,14 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from PySide6.QtCore import (QCoreApplication, Qt, QMetaObject, QPropertyAnimation, QRect, QEvent, QObject)
 from PySide6.QtWidgets import (QApplication, QFrame, QGridLayout, QLabel, QLineEdit,
                                QPushButton, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QTableWidget, QHeaderView)
-from forms.agregarProveedor import Ui_Form as FormularioProv
-from db.prov_queries import (
+from forms.AgregarClientes import Ui_Form as FormularioClientes
+from db.clientes_queries import (
     guardar_registro,
-    cargar_proveedores,
-    buscar_proveedores,
-    editar_proveedor,
-    obtener_proveedor_por_id,
+    cargar_clientes,
+    buscar_clientes,
+    editar_cliente,
+    obtener_cliente_por_id,
 )
-
 
 class Ui_Form(object):
     def setupUi(self, Form):
@@ -121,7 +120,7 @@ class Ui_Form(object):
 
         # Title
         self.label_title = QLabel(self.header_frame)
-        self.label_title.setText("Proveedores")
+        self.label_title.setText("Clientes")
         self.header_layout.addWidget(self.label_title)
 
         # Search + Button aligned
@@ -130,7 +129,7 @@ class Ui_Form(object):
         self.search_layout.setSpacing(10)
 
         self.lineEdit = QLineEdit(self.header_frame)
-        self.lineEdit.setPlaceholderText("Buscar proveedor")
+        self.lineEdit.setPlaceholderText("Buscar por nombre o RUC/CI")
         self.lineEdit.setMinimumWidth(int(Form.width() * 0.5))
         self.lineEdit.setAlignment(Qt.AlignmentFlag.AlignLeft)
         self.search_layout.addWidget(self.lineEdit)
@@ -139,15 +138,13 @@ class Ui_Form(object):
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.search_layout.addWidget(spacer)
 
-
         self.newButton = QPushButton(self.header_frame)
-        self.newButton.setText("Nuevo proveedor")
+        self.newButton.setText("Nuevo cliente")
         self.newButton.setFixedWidth(150)
         self.newButton.setMinimumHeight(22)   
         self.search_layout.addWidget(self.newButton)
         self.newButton.clicked.connect(lambda: self.abrir_formulario(Form))
         
-
         self.header_layout.addLayout(self.search_layout)
         self.gridLayout.addWidget(self.header_frame, 0, 0, 1, 1)
 
@@ -163,7 +160,7 @@ class Ui_Form(object):
         self.tableWidget.setObjectName("tableWidget")
         self.tableWidget.verticalHeader().setVisible(False)
         self.tableWidget.setColumnCount(6)
-        self.tableWidget.setHorizontalHeaderLabels(["ID", "Nombre", "Teléfono", "Dirección", "Email", "Opciones"])
+        self.tableWidget.setHorizontalHeaderLabels(["ID", "Nombre", "Teléfono", "CI/RUC", "Email", "Opciones"])
         header = self.tableWidget.horizontalHeader()
         header.setStretchLastSection(True)
         for col in range(self.tableWidget.columnCount()):
@@ -174,31 +171,29 @@ class Ui_Form(object):
 
         # Conectar búsqueda en tiempo real
         self.lineEdit.textChanged.connect(
-            lambda text: buscar_proveedores(text, self.tableWidget, edit_callback=self.abrir_formulario_editar, main_form_widget=Form)
+            lambda text: buscar_clientes(text, self.tableWidget, edit_callback=self.abrir_formulario_editar, main_form_widget=Form)
         )
 
-        # Cargar proveedores inicialmente (pasa el callback de edición y el widget Form)
-        cargar_proveedores(self.tableWidget, edit_callback=self.abrir_formulario_editar, main_form_widget=Form)
+        # Cargar clientes inicialmente (pasa el callback de edición y el widget Form)
+        cargar_clientes(self.tableWidget, edit_callback=self.abrir_formulario_editar, main_form_widget=Form)
 
         self.retranslateUi(Form)
         QMetaObject.connectSlotsByName(Form)
 
     def retranslateUi(self, Form):
-        Form.setWindowTitle(QCoreApplication.translate("Form", u"Proveedores", None))
+        Form.setWindowTitle(QCoreApplication.translate("Form", u"Clientes", None))
         
     def cancelar(self, Form):
-        if hasattr(self, 'formularioProveedor') and self.formularioProveedor.isVisible():
-            self.formularioProveedor.close()
+        if hasattr(self, 'formularioCliente') and self.formularioCliente.isVisible():
+            self.formularioCliente.close()
         
         # Reagregamos header y tabla en su posición por si fueron movidos
         try:
-            # Si el formulario fue removido del grid, intentamos restaurar el orden
             self.gridLayout.removeWidget(self.header_frame)
             self.gridLayout.removeWidget(self.table_frame)
         except Exception:
             pass
 
-        # Añadimos header y tabla a sus posiciones por defecto
         try:
             self.gridLayout.addWidget(self.header_frame, 0, 0, 1, 1)
             self.gridLayout.addWidget(self.table_frame, 1, 0, 1, 1)
@@ -207,71 +202,17 @@ class Ui_Form(object):
         
     def abrir_formulario(self, Form):
         # Evitar abrir múltiples formularios
-        if hasattr(self, 'formularioProveedor') and self.formularioProveedor.isVisible():
+        if hasattr(self, 'formularioCliente') and self.formularioCliente.isVisible():
             return
 
-        self.ui_nuevo_proveedor = FormularioProv()
-        self.formularioProveedor = QWidget()
-        self.ui_nuevo_proveedor.setupUi(self.formularioProveedor)
+        self.ui_nuevo_cliente = FormularioClientes()
+        self.formularioCliente = QWidget()
+        self.ui_nuevo_cliente.setupUi(self.formularioCliente)
 
-        self.formularioProveedor.setParent(Form)
-        self.formularioProveedor.show()
+        self.formularioCliente.setParent(Form)
+        self.formularioCliente.show()
         
-        # Eliminar widgets anteriores del gridLayout (si existen) y reordenar
-        try:
-            self.gridLayout.removeWidget(self.header_frame)
-            self.gridLayout.removeWidget(self.table_frame)
-        except Exception:
-            pass
-    
-        # Agregar el formulario arriba, el header abajo, y la tabla aún más abajo
-        self.gridLayout.addWidget(self.header_frame, 1, 0, 1, 1)
-
-        self.gridLayout.addWidget(self.formularioProveedor, 0, 0, 1, 1)
-        self.gridLayout.addWidget(self.table_frame, 2, 0, 1, 1)
-        
-        # Funciones internas para ajustar altura y posición
-        def ajustar_formulario():
-            ancho_formulario = Form.width()
-            alto_formulario = int(Form.height() * 0.40)
-            self.formularioProveedor.setGeometry(0, 0, ancho_formulario, alto_formulario)
-
-        ajustar_formulario()  # llamada inicial
-
-        # Animación para deslizar desde arriba hacia abajo
-        ancho_formulario = Form.width()
-        alto_formulario = int(Form.height() * 0.40)
-
-        self.formularioProveedor.setGeometry(0, -alto_formulario, ancho_formulario, alto_formulario)
-        self.anim = QPropertyAnimation(self.formularioProveedor, b"geometry")
-        self.anim.setDuration(300)
-        self.anim.setStartValue(QRect(0, -alto_formulario, ancho_formulario, alto_formulario))
-        self.anim.setEndValue(QRect(0, 0, ancho_formulario, alto_formulario))
-        self.anim.start()
-
-        # Reajustar el formulario si el Form cambia de tamaño
-        self.resize_filter = ResizeHandler(Form, self.formularioProveedor)
-        Form.installEventFilter(self.resize_filter)
-        
-        # Conectar botones del formulario recién creado
-        self.ui_nuevo_proveedor.pushButtonCancelar.clicked.connect(lambda: self.cancelar(Form))
-        self.ui_nuevo_proveedor.pushButton.clicked.connect(
-            lambda: guardar_registro(self.ui_nuevo_proveedor, self.formularioProveedor, self.tableWidget, self.abrir_formulario_editar, Form)
-        )
-
-    def abrir_formulario_editar(self, Form, id_proveedor):
-        # Cerrar cualquier formulario abierto y abrir uno nuevo pre-llenado
-        if hasattr(self, 'formularioProveedor') and self.formularioProveedor.isVisible():
-            self.formularioProveedor.close()
-
-        self.ui_nuevo_proveedor = FormularioProv()
-        self.formularioProveedor = QWidget()
-        self.ui_nuevo_proveedor.setupUi(self.formularioProveedor)
-
-        self.formularioProveedor.setParent(Form)
-        self.formularioProveedor.show()
-
-        # Reordenar layout como en "abrir_formulario"
+        # Reordenar layout para mostrar formulario
         try:
             self.gridLayout.removeWidget(self.header_frame)
             self.gridLayout.removeWidget(self.table_frame)
@@ -279,44 +220,98 @@ class Ui_Form(object):
             pass
 
         self.gridLayout.addWidget(self.header_frame, 1, 0, 1, 1)
-        self.gridLayout.addWidget(self.formularioProveedor, 0, 0, 1, 1)
+        self.gridLayout.addWidget(self.formularioCliente, 0, 0, 1, 1)
         self.gridLayout.addWidget(self.table_frame, 2, 0, 1, 1)
-
-        # Ajustes y animación
+        
+        # Ajustes de tamaño y animación
         def ajustar_formulario():
             ancho_formulario = Form.width()
             alto_formulario = int(Form.height() * 0.40)
-            self.formularioProveedor.setGeometry(0, 0, ancho_formulario, alto_formulario)
+            self.formularioCliente.setGeometry(0, 0, ancho_formulario, alto_formulario)
 
         ajustar_formulario()
 
         ancho_formulario = Form.width()
         alto_formulario = int(Form.height() * 0.40)
 
-        self.formularioProveedor.setGeometry(0, -alto_formulario, ancho_formulario, alto_formulario)
-        self.anim = QPropertyAnimation(self.formularioProveedor, b"geometry")
+        self.formularioCliente.setGeometry(0, -alto_formulario, ancho_formulario, alto_formulario)
+        self.anim = QPropertyAnimation(self.formularioCliente, b"geometry")
         self.anim.setDuration(300)
         self.anim.setStartValue(QRect(0, -alto_formulario, ancho_formulario, alto_formulario))
         self.anim.setEndValue(QRect(0, 0, ancho_formulario, alto_formulario))
         self.anim.start()
 
         # Reajustar el formulario si el Form cambia de tamaño
-        self.resize_filter = ResizeHandler(Form, self.formularioProveedor)
+        self.resize_filter = ResizeHandler(Form, self.formularioCliente)
+        Form.installEventFilter(self.resize_filter)
+        
+        # Conectar botones del formulario recién creado
+        # Asumo que en forms.AgregarClientes los botones se llaman pushButton (guardar) y pushButtonCancelar
+        self.ui_nuevo_cliente.pushButtonCancelar.clicked.connect(lambda: self.cancelar(Form))
+        self.ui_nuevo_cliente.pushButtonAceptar.clicked.connect(
+            lambda: guardar_registro(self.ui_nuevo_cliente, self.formularioCliente, self.tableWidget, self.abrir_formulario_editar, Form)
+        )
+
+    def abrir_formulario_editar(self, Form, id_cliente):
+        # Cerrar cualquier formulario abierto y abrir uno nuevo pre-llenado
+        if hasattr(self, 'formularioCliente') and self.formularioCliente.isVisible():
+            self.formularioCliente.close()
+
+        self.ui_nuevo_cliente = FormularioClientes()
+        self.formularioCliente = QWidget()
+        self.ui_nuevo_cliente.setupUi(self.formularioCliente)
+
+        self.formularioCliente.setParent(Form)
+        self.formularioCliente.show()
+
+        # Reordenar layout
+        try:
+            self.gridLayout.removeWidget(self.header_frame)
+            self.gridLayout.removeWidget(self.table_frame)
+        except Exception:
+            pass
+
+        self.gridLayout.addWidget(self.header_frame, 1, 0, 1, 1)
+        self.gridLayout.addWidget(self.formularioCliente, 0, 0, 1, 1)
+        self.gridLayout.addWidget(self.table_frame, 2, 0, 1, 1)
+
+        # Ajustes y animación
+        def ajustar_formulario():
+            ancho_formulario = Form.width()
+            alto_formulario = int(Form.height() * 0.40)
+            self.formularioCliente.setGeometry(0, 0, ancho_formulario, alto_formulario)
+
+        ajustar_formulario()
+
+        ancho_formulario = Form.width()
+        alto_formulario = int(Form.height() * 0.40)
+
+        self.formularioCliente.setGeometry(0, -alto_formulario, ancho_formulario, alto_formulario)
+        self.anim = QPropertyAnimation(self.formularioCliente, b"geometry")
+        self.anim.setDuration(300)
+        self.anim.setStartValue(QRect(0, -alto_formulario, ancho_formulario, alto_formulario))
+        self.anim.setEndValue(QRect(0, 0, ancho_formulario, alto_formulario))
+        self.anim.start()
+
+        # Reajustar el formulario si el Form cambia de tamaño
+        self.resize_filter = ResizeHandler(Form, self.formularioCliente)
         Form.installEventFilter(self.resize_filter)
 
-        # Cargar datos del proveedor y setear en los campos
-        proveedor = obtener_proveedor_por_id(id_proveedor)
-        if proveedor:
-            _, nombre, telefono, direccion, correo = proveedor
-            self.ui_nuevo_proveedor.lineEditNombre.setText(nombre)
-            self.ui_nuevo_proveedor.lineEditDireccion.setText(direccion)
-            self.ui_nuevo_proveedor.lineEditTelefono.setText(str(telefono))
-            self.ui_nuevo_proveedor.lineEditCorreo.setText(correo)
+        # Cargar datos del cliente y setear en los campos
+        cliente = obtener_cliente_por_id(id_cliente)
+        if cliente:
+            # cliente expected: (id, nombre, email, telefono, ruc_ci)
+            _, nombre, email, telefono, ruc_ci = cliente
+            # Ajustar campos según los nombres del form
+            self.ui_nuevo_cliente.lineEditNombre.setText(nombre)
+            self.ui_nuevo_cliente.lineEditRuc_Ci.setText(str(ruc_ci) if ruc_ci is not None else "")
+            self.ui_nuevo_cliente.lineEditTelefono.setText(str(telefono) if telefono is not None else "")
+            self.ui_nuevo_cliente.lineEditCorreo.setText(email if email is not None else "")
 
-        # Conectar botones: cancelar y guardar (que llamará a editar_proveedor)
-        self.ui_nuevo_proveedor.pushButtonCancelar.clicked.connect(lambda: self.cancelar(Form))
-        self.ui_nuevo_proveedor.pushButton.clicked.connect(
-            lambda: editar_proveedor(self.ui_nuevo_proveedor, self.tableWidget, id_proveedor, self.formularioProveedor, self.abrir_formulario_editar, Form)
+        # Conectar botones: cancelar y guardar (que llamará a editar_cliente)
+        self.ui_nuevo_cliente.pushButtonCancelar.clicked.connect(lambda: self.cancelar(Form))
+        self.ui_nuevo_cliente.pushButtonAceptar.clicked.connect(
+            lambda: editar_cliente(self.ui_nuevo_cliente, self.tableWidget, id_cliente, self.formularioCliente, self.abrir_formulario_editar, Form)
         )
 
 
@@ -332,8 +327,8 @@ class ResizeHandler(QObject):
             alto = int(self.form.height() * 0.40)
             self.widget.setGeometry(0, 0, ancho, alto)
         return False
-        
-        
+
+
 if __name__ == "__main__":
     import sys
     app = QApplication(sys.argv)
