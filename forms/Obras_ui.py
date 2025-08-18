@@ -8,6 +8,8 @@ from PySide6.QtWidgets import (
 )
 from db.conexion import conexion
 from forms.formulario_nueva_obra import FormularioNuevaObra
+from forms.detalles_obra import DetallesObraWidget
+
 
 class ObrasWidget(QWidget):
     def __init__(self, parent=None):
@@ -133,6 +135,11 @@ class ObrasWidget(QWidget):
             if widget:
                 widget.deleteLater()
         self.cargar_obras()
+        
+    def abrir_detalles_obra(self, id_obra):
+        self.detalle_ventana = DetallesObraWidget(id_obra)
+        self.detalle_ventana.show()
+
 
     def agregar_card_obra(self, obra):
         frame = QFrame()
@@ -146,6 +153,7 @@ class ObrasWidget(QWidget):
 
         botones = QHBoxLayout()
         btn_ver = QPushButton("Ver Detalles")
+        btn_ver.clicked.connect(lambda _, id=obra['id_obra']: self.abrir_detalles_obra(id))
         btn_editar = QPushButton("✎")
         btn_eliminar = QPushButton("🗑")
 
