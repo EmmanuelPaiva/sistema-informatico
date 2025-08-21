@@ -8,16 +8,14 @@ from PySide6.QtWidgets import (
     QLabel, QFrame, QPushButton, QMenuBar, QStatusBar, QStackedWidget
 )
 
-# Importación de todos los módulos
 from forms.productos_ui import Ui_Form as ProductosForm
 from forms.compras_ui import Ui_Form as ComprasForm
-from forms.Obras_ui import Ui_Form as ObrasForm
-from forms.ventas_ui import Ui_Form as VentasForm
+from forms.Obras_ui import ObrasWidget
+from forms.Ventas_ui import Ui_Form as VentasForm
 from forms.Clientes_ui import Ui_Form as ClientesForm
 from forms.Proveedores_ui import Ui_Form as ProveedoresForm
 
 
-# Señal personalizada para QLabel clickeable
 class SenalLabel(QLabel):
     clicked = Signal()
     def mousePressEvent(self, event):
@@ -31,19 +29,16 @@ class Ui_MainWindow(object):
             MainWindow.setObjectName("MainWindow")
         MainWindow.resize(1000, 600)
 
-        # === Central Widget ===
         self.centralwidget = QWidget(MainWindow)
         self.gridLayout = QGridLayout(self.centralwidget)
         self.gridLayout.setContentsMargins(0, 0, 0, 0)
         self.gridLayout.setSpacing(0)
 
-        # === Contenedor principal ===
         self.mainContainer = QWidget(self.centralwidget)
         self.gridLayout_2 = QGridLayout(self.mainContainer)
         self.gridLayout_2.setContentsMargins(0, 0, 0, 0)
         self.gridLayout_2.setSpacing(0)
 
-        # === Menú Superior ===
         self.contenedorMenuAlto = QWidget(self.mainContainer)
         self.contenedorMenuAlto.setMaximumHeight(40)
         self.horizontalLayout_3 = QHBoxLayout(self.contenedorMenuAlto)
@@ -69,7 +64,6 @@ class Ui_MainWindow(object):
         self.horizontalLayout_3.addWidget(self.menualto)
         self.gridLayout_2.addWidget(self.contenedorMenuAlto, 0, 0, 1, 2)
 
-        # === Menú lateral ===
         self.menuLateral = QFrame(self.mainContainer)
         self.menuLateral.setObjectName("menuLateral")
         self.menuLateral.setMaximumWidth(200)
@@ -78,17 +72,15 @@ class Ui_MainWindow(object):
 
         self.verticalLayout = QVBoxLayout(self.menuLateral)
 
-        # Diccionario para módulos
         self.modulos = {
             "Productos": ProductosForm,
             "Ventas": VentasForm,
             "Compras": ComprasForm,
-            "Obras": ObrasForm,
+            "Obras": ObrasWidget,
             "Clientes": ClientesForm,
             "Proveedores": ProveedoresForm
         }
 
-        # Crear labels del menú
         self.menu_labels = {}
         for nombre_modulo in self.modulos.keys():
             label = SenalLabel(nombre_modulo)
@@ -102,10 +94,8 @@ class Ui_MainWindow(object):
 
         self.gridLayout_2.addWidget(self.menuLateral, 1, 0, 1, 1)
 
-        # === Área central con QStackedWidget ===
         self.stackedWidget = QStackedWidget(self.mainContainer)
 
-        # Página principal (Dashboard)
         self.paginaPrincipal = QWidget()
         self.paginaPrincipal.setObjectName("paginaPrincipal")
         dashboard_layout = QGridLayout(self.paginaPrincipal)
@@ -127,16 +117,13 @@ class Ui_MainWindow(object):
         self.gridLayout.addWidget(self.mainContainer, 0, 0)
         MainWindow.setCentralWidget(self.centralwidget)
 
-        # Barra de menú y estado
         self.menubar = QMenuBar(MainWindow)
         MainWindow.setMenuBar(self.menubar)
         self.statusbar = QStatusBar(MainWindow)
         MainWindow.setStatusBar(self.statusbar)
 
-        # Conexión del botón para ocultar menú
         self.botonOcultarMenu.clicked.connect(self.toggleMenuLateral)
 
-        # === Estilos generales ===
         MainWindow.setStyleSheet("""
             QMainWindow {
                 background-color: #f4f6f8;
@@ -147,7 +134,6 @@ class Ui_MainWindow(object):
             }
             #menualto {
                 color: black;
-                
             }
             #menuLateral {
                 background-color: #ffffff;
@@ -175,7 +161,6 @@ class Ui_MainWindow(object):
             }
         """)
 
-        # === Estilos SOLO para el dashboard ===
         self.paginaPrincipal.setStyleSheet("""
             #tarjetaDashboard {
                 background-color: #ffffff;
@@ -218,9 +203,12 @@ class Ui_MainWindow(object):
             self.stackedWidget.setCurrentWidget(self.paginaPrincipal)
         else:
             if not hasattr(self, f"pagina_{nombre_modulo}"):
-                pagina = QWidget()
-                ui_modulo = self.modulos[nombre_modulo]()
-                ui_modulo.setupUi(pagina)
+                instancia_modulo = self.modulos[nombre_modulo]()
+                if hasattr(instancia_modulo, "setupUi"):
+                    pagina = QWidget()
+                    instancia_modulo.setupUi(pagina)
+                else:
+                    pagina = instancia_modulo  # Es un QWidget puro como ObrasWidget
                 self.stackedWidget.addWidget(pagina)
                 setattr(self, f"pagina_{nombre_modulo}", pagina)
             self.stackedWidget.setCurrentWidget(getattr(self, f"pagina_{nombre_modulo}"))
