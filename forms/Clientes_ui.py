@@ -4,7 +4,8 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from PySide6.QtCore import (QCoreApplication, Qt, QMetaObject, QPropertyAnimation, QRect, QEvent, QObject)
 from PySide6.QtWidgets import (QApplication, QFrame, QGridLayout, QLabel, QLineEdit,
-                               QPushButton, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QTableWidget, QHeaderView)
+                               QPushButton, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QTableWidget, QHeaderView,
+                               QFileDialog, QMessageBox)
 from forms.AgregarClientes import Ui_Form as FormularioClientes
 from db.clientes_queries import (
     guardar_registro,
@@ -13,6 +14,15 @@ from db.clientes_queries import (
     editar_cliente,
     obtener_cliente_por_id,
 )
+from reports.excel import export_qtable_to_excel
+
+# >>> Estilos del sistema (ui_helpers.py)
+try:
+    from ui_helpers import apply_global_styles, mark_title, make_primary, make_danger, style_table, style_search  # noqa
+except ModuleNotFoundError:
+    # fallback por si está dentro de forms/
+    from forms.ui_helpers import apply_global_styles, mark_title, make_primary, make_danger, style_table, style_search  # noqa
+
 
 class Ui_Form(object):
     def setupUi(self, Form):
@@ -123,6 +133,9 @@ class Ui_Form(object):
         self.label_title.setText("Clientes")
         self.header_layout.addWidget(self.label_title)
 
+        # >>> Título con estilo del sistema
+        mark_title(self.label_title)
+
         # Search + Button aligned
         self.search_layout = QHBoxLayout()
         self.search_layout.setContentsMargins(0, 0, 0, 0)
@@ -133,10 +146,24 @@ class Ui_Form(object):
         self.lineEdit.setMinimumWidth(int(Form.width() * 0.5))
         self.lineEdit.setAlignment(Qt.AlignmentFlag.AlignLeft)
         self.search_layout.addWidget(self.lineEdit)
+
+        # >>> Estilo del buscador
+        style_search(self.lineEdit)
         
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.search_layout.addWidget(spacer)
+
+        # Botón Exportar (nuevo)
+        self.btnExportar = QPushButton(self.header_frame)
+        self.btnExportar.setText("Exportar")
+        self.btnExportar.setFixedWidth(120)
+        self.btnExportar.setMinimumHeight(22)
+        self.btnExportar.clicked.connect(self.exportar_excel_clientes)
+        self.search_layout.addWidget(self.btnExportar)
+
+        # >>> Botones con estilo primario
+        make_primary(self.btnExportar)
 
         self.newButton = QPushButton(self.header_frame)
         self.newButton.setText("Nuevo cliente")
@@ -144,6 +171,9 @@ class Ui_Form(object):
         self.newButton.setMinimumHeight(22)   
         self.search_layout.addWidget(self.newButton)
         self.newButton.clicked.connect(lambda: self.abrir_formulario(Form))
+
+        # >>> Botones con estilo primario
+        make_primary(self.newButton)
         
         self.header_layout.addLayout(self.search_layout)
         self.gridLayout.addWidget(self.header_frame, 0, 0, 1, 1)
@@ -162,9 +192,20 @@ class Ui_Form(object):
         self.tableWidget.setColumnCount(6)
         self.tableWidget.setHorizontalHeaderLabels(["ID", "Nombre", "Teléfono", "CI/RUC", "Email", "Opciones"])
         header = self.tableWidget.horizontalHeader()
-        header.setStretchLastSection(True)
-        for col in range(self.tableWidget.columnCount()):
-            header.setSectionResizeMode(col, QHeaderView.Stretch)
+        header.setStretchLastSection(False)  # para controlar "Opciones"
+        # Ajustes de columnas para visibilidad:
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # ID
+        header.setSectionResizeMode(1, QHeaderView.Stretch)           # Nombre
+        header.setSectionResizeMode(2, QHeaderView.Stretch)           # Teléfono
+        header.setSectionResizeMode(3, QHeaderView.Stretch)           # CI/RUC
+        header.setSectionResizeMode(4, QHeaderView.Stretch)           # Email
+        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # Opciones (a contenido)
+        # Filas un poquito más separadas
+        self.tableWidget.verticalHeader().setDefaultSectionSize(46)
+
+        # >>> Estilo de tabla del sistema
+        style_table(self.tableWidget)
+
         self.verticalLayout.addWidget(self.tableWidget)
 
         self.gridLayout.addWidget(self.table_frame, 1, 0, 1, 1)
@@ -177,12 +218,30 @@ class Ui_Form(object):
         # Cargar clientes inicialmente (pasa el callback de edición y el widget Form)
         cargar_clientes(self.tableWidget, edit_callback=self.abrir_formulario_editar, main_form_widget=Form)
 
+        # >>> Aplicar estilos globales del sistema al final
+        apply_global_styles(Form)
+
         self.retranslateUi(Form)
         QMetaObject.connectSlotsByName(Form)
 
     def retranslateUi(self, Form):
         Form.setWindowTitle(QCoreApplication.translate("Form", u"Clientes", None))
-        
+    
+    def exportar_excel_clientes(self):
+        try:
+            ruta, _ = QFileDialog.getSaveFileName(
+                None,
+                "Guardar como",
+                "Clientes.xlsx",
+                "Excel (*.xlsx)"
+            )
+            if not ruta:
+                return
+            export_qtable_to_excel(self.tableWidget, ruta, title="Clientes")
+            QMessageBox.information(None, "Éxito", "Exportación completada.")
+        except Exception as e:
+            QMessageBox.critical(None, "Error", f"No se pudo exportar:\n{e}")
+
     def cancelar(self, Form):
         if hasattr(self, 'formularioCliente') and self.formularioCliente.isVisible():
             self.formularioCliente.close()
@@ -246,7 +305,6 @@ class Ui_Form(object):
         Form.installEventFilter(self.resize_filter)
         
         # Conectar botones del formulario recién creado
-        # Asumo que en forms.AgregarClientes los botones se llaman pushButton (guardar) y pushButtonCancelar
         self.ui_nuevo_cliente.pushButtonCancelar.clicked.connect(lambda: self.cancelar(Form))
         self.ui_nuevo_cliente.pushButtonAceptar.clicked.connect(
             lambda: guardar_registro(self.ui_nuevo_cliente, self.formularioCliente, self.tableWidget, self.abrir_formulario_editar, Form)
@@ -302,7 +360,6 @@ class Ui_Form(object):
         if cliente:
             # cliente expected: (id, nombre, email, telefono, ruc_ci)
             _, nombre, email, telefono, ruc_ci = cliente
-            # Ajustar campos según los nombres del form
             self.ui_nuevo_cliente.lineEditNombre.setText(nombre)
             self.ui_nuevo_cliente.lineEditRuc_Ci.setText(str(ruc_ci) if ruc_ci is not None else "")
             self.ui_nuevo_cliente.lineEditTelefono.setText(str(telefono) if telefono is not None else "")

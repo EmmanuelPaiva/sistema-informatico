@@ -1,449 +1,552 @@
 import sys
 import os
+from decimal import Decimal
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from PySide6.QtCore import Qt, QCoreApplication, QMetaObject
-from PySide6.QtGui import QFont
+
+from PySide6.QtCore import Qt, QCoreApplication, QMetaObject, QObject, QEvent
 from PySide6.QtWidgets import (
-    QApplication, QFrame, QHBoxLayout, QLabel, QPushButton, QSizePolicy,
-    QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget, QHeaderView, QStackedLayout, QStackedWidget, QGridLayout, QMessageBox
+    QApplication, QFrame, QHBoxLayout, QLabel, QPushButton,
+    QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget, QHeaderView,
+    QMessageBox, QFileDialog, QLineEdit, QSizePolicy
 )
+
 from forms.agregarProductos import Ui_Form as AgregarProductoForm
 from db.conexion import conexion
-from forms.editarProductos import Ui_Form
+try:
+    import psycopg2
+    from psycopg2 import errors as pg_errors
+except Exception:
+    psycopg2 = None
+    pg_errors = None
+
+from reports.excel import export_qtable_to_excel
+
+# === Estilos y helpers Rodler (paleta clara) ===
+from forms.ui_helpers import (
+    apply_global_styles, mark_title, make_primary, make_danger, style_table, style_search
+)
+
+OPCIONES_MIN_WIDTH = 140  # ancho mínimo para Editar/Eliminar
+
+
+class _ResizeWatcher(QObject):
+    """Observa resizeEvent del QTableWidget para reajustar columnas."""
+    def __init__(self, owner):
+        super().__init__()
+        self.owner = owner
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Resize:
+            self.owner.ajustar_columnas()
+        return False
+
 
 class Ui_Form(object):
     def setupUi(self, Form):
         Form.setObjectName("Form")
         Form.resize(1000, 600)
-        
-            # 🎨 Aplicar estilos globales
-        Form.setStyleSheet("""
-            QWidget {
-                font-family: Segoe UI, sans-serif;
-                font-size: 14px;
-                background-color: #f9fbfd;
-            }
 
-            /* Controles */
-            QLineEdit, QDateTimeEdit, QComboBox {
-                padding: 8px;
-                border: 1px solid #b0c4de;
-                border-radius: 8px;
-                background-color: #ffffff;
-            }
+        # ===== Layout raíz =====
+        self.rootLayout = QVBoxLayout(Form)
+        self.rootLayout.setContentsMargins(12, 12, 12, 12)
+        self.rootLayout.setSpacing(10)
 
-            QLineEdit:focus, QDateTimeEdit:focus, QComboBox:focus {
-                border: 1px solid #5dade2;
-                background-color: #eef7ff;
-            }
+        # ===== Encabezado =====
+        self.headerFrame = QFrame(Form)
+        self.headerFrame.setFrameShape(QFrame.Shape.NoFrame)
+        self.headerLayout = QHBoxLayout(self.headerFrame)
+        self.headerLayout.setContentsMargins(0, 0, 0, 0)
+        self.headerLayout.setSpacing(10)
 
-            /* Botones */
-            QPushButton {
-                padding: 10px 18px;
-                background-color: #5dade2;
-                color: white;
-                font-weight: bold;
-                border-radius: 10px;
-                border: none;
-            }
+        self.label = QLabel(self.headerFrame)
+        self.label.setText("Productos")
+        mark_title(self.label)
 
-            QPushButton:hover {
-                background-color: #3498db;
-            }
+        self.headerLayout.addWidget(self.label)
+        self.headerLayout.addStretch(1)
 
-            QPushButton:pressed {
-                background-color: #2e86c1;
-            }
+        # Buscador
+        self.searchBox = QLineEdit(self.headerFrame)
+        self.searchBox.setPlaceholderText("Buscar por nombre o proveedor…")
+        self.searchBox.setClearButtonEnabled(True)
+        self.searchBox.setMinimumWidth(260)
+        self.searchBox.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        style_search(self.searchBox)
+        self.searchBox.textChanged.connect(self.filtrar_tabla)
+        self.headerLayout.addWidget(self.searchBox)
 
-            /* Labels */
-            QLabel {
-                font-weight: bold;
-                color: #2c3e50;
-            }
+        self.btnExportExcel = QPushButton(self.headerFrame)
+        self.btnExportExcel.setMinimumSize(100, 34)
+        self.btnExportExcel.setMaximumWidth(200)
+        self.btnExportExcel.setText("Exportar Excel")
+        self.btnExportExcel.setToolTip("Exporta la tabla visible a Excel (.xlsx)")
+        make_primary(self.btnExportExcel)
+        self.btnExportExcel.clicked.connect(self.exportar_excel)
 
-            /* Tabla */
-            QTableWidget {
-                border: 1px solid #d6eaf8;
-                border-radius: 8px;
-                background-color: #ffffff;
-                gridline-color: #d0d0d0;
-            }
-
-            QTableWidget::item {
-                padding: 6px;
-                font-size: 12px;
-                color: #333333;
-                height: 40px;
-            }
-
-            QHeaderView::section {
-                background-color: #3498db;
-                color: white;
-                padding: 8px;
-                border: none;
-                font-size: 13px;
-            }
-
-            QTableCornerButton::section {
-                background-color: #3498db;
-            }
-
-            QScrollBar:vertical {
-                border: none;
-                background: #f0f0f0;
-                width: 8px;
-                margin: 0px;
-                border-radius: 4px;
-            }
-
-            QScrollBar::handle:vertical {
-                background: #a0c4ff;
-                min-height: 20px;
-                border-radius: 4px;
-            }
-        """)
-        
-        self.verticalLayout = QVBoxLayout(Form)
-        self.verticalLayout.setContentsMargins(0, 0, 0, 0)
-        self.verticalLayout.setSpacing(0)
-
-        self.frame = QFrame(Form)
-        self.frame.setObjectName("frame")
-        self.frame.setFrameShape(QFrame.Shape.StyledPanel)
-        self.frame.setFrameShadow(QFrame.Shadow.Raised)
-        self.frame.setMinimumHeight(0)
-        self.frame.setStyleSheet("QFrame { border: none; padding: 0px; margin: 0px; background-color: #f0f0f0; }")
-
-        self.horizontalLayout = QHBoxLayout(self.frame)
-        self.horizontalLayout.setContentsMargins(60,30, 50,50)
-        self.horizontalLayout.setSpacing(0)
-    
-
-        self.label = QLabel(self.frame)
-        self.label.setObjectName("label")
-
-
-        self.pushButton = QPushButton(self.frame)
-        self.pushButton.setObjectName("pushButton")
-        self.pushButton.setMinimumSize(80, 32)
-        self.pushButton.setMaximumWidth(190)
-
-        
+        self.pushButton = QPushButton(self.headerFrame)
+        self.pushButton.setMinimumSize(120, 34)
+        self.pushButton.setMaximumWidth(220)
+        self.pushButton.setText("Agregar producto")
+        self.pushButton.setCursor(Qt.PointingHandCursor)
+        make_primary(self.pushButton)
         self.pushButton.clicked.connect(self.mostrar_formulario)
 
-        self.horizontalLayout.addWidget(self.label)
-        self.horizontalLayout.addWidget(self.pushButton)
-        self.verticalLayout.addWidget(self.frame)
+        self.headerLayout.addWidget(self.btnExportExcel)
+        self.headerLayout.addWidget(self.pushButton)
+        self.rootLayout.addWidget(self.headerFrame)
 
+        # ===== Tabla =====
         self.tableWidget = QTableWidget(Form)
-        self.tableWidget.setObjectName("tableWidget")
         self.tableWidget.setColumnCount(6)
-        self.tableWidget.setHorizontalHeaderLabels(["ID","Nombre", "Precio", "Stock", "Proveedor", "Opciones"])
+        self.tableWidget.setHorizontalHeaderLabels(["ID", "Nombre", "Precio", "Stock", "Proveedor", "Opciones"])
         self.tableWidget.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.tableWidget.setWordWrap(False)
+        self.tableWidget.setAlternatingRowColors(False)
         self.tableWidget.verticalHeader().setVisible(False)
-        self.tableWidget.verticalHeader().setDefaultSectionSize(60)
-        self.tableWidget.setColumnHidden(0, True)
-        
-        header = self.tableWidget.horizontalHeader()
-        for col in range(6):
-            header.setSectionResizeMode(col, QHeaderView.Stretch) 
-        self.cargar_todos_los_productos()
+        self.tableWidget.verticalHeader().setDefaultSectionSize(44)
+        self.tableWidget.setColumnHidden(0, True)  # Oculta ID
 
-        self.verticalLayout.addWidget(self.tableWidget)
+        header = self.tableWidget.horizontalHeader()
+        header.setHighlightSections(False)
+        header.setStretchLastSection(False)
+
+        # Modo de resize: 1..4 Stretch (mismo tamaño); 5 Opciones a contenido
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # ID (oculto)
+        header.setSectionResizeMode(1, QHeaderView.Stretch)           # Nombre
+        header.setSectionResizeMode(2, QHeaderView.Stretch)           # Precio
+        header.setSectionResizeMode(3, QHeaderView.Stretch)           # Stock
+        header.setSectionResizeMode(4, QHeaderView.Stretch)           # Proveedor
+        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # Opciones (pequeña)
+
+        style_table(self.tableWidget)  # aplica estilo de headers/bordes/selección
+        self.rootLayout.addWidget(self.tableWidget)
+
+        # Watcher para recalcular columnas cuando la tabla cambia de tamaño
+        self._resizeWatcher = _ResizeWatcher(self)
+        self.tableWidget.installEventFilter(self._resizeWatcher)
+
+        # ===== Cargar datos =====
+        self.cargar_todos_los_productos()
+        self.ajustar_columnas()  # asegura tamaños iniciales
+
+        # ===== Estilos globales del módulo =====
+        apply_global_styles(Form)
 
         self.retranslateUi(Form)
         QMetaObject.connectSlotsByName(Form)
 
 
+    # ======= Exportar =======
+    def exportar_excel(self):
+        try:
+            ruta, _ = QFileDialog.getSaveFileName(
+                None,
+                "Guardar como",
+                "Productos.xlsx",
+                "Excel (*.xlsx)"
+            )
+            if not ruta:
+                return
+            export_qtable_to_excel(self.tableWidget, ruta, title="Productos")
+            QMessageBox.information(None, "Éxito", "Exportación completada.")
+        except Exception as e:
+            QMessageBox.critical(None, "Error", f"No se pudo exportar:\n{e}")
+
+
     def retranslateUi(self, Form):
         Form.setWindowTitle(QCoreApplication.translate("Form", "Productos"))
-        self.label.setText(QCoreApplication.translate("Form", "Productos"))
-        self.pushButton.setText(QCoreApplication.translate("Form", "Agregar Producto"))
 
-    
+
+    # ---------- ALTA ----------
     def mostrar_formulario(self):
-        if hasattr(self, 'widgetAgregarProducto'):
+        if hasattr(self, 'widgetAgregarProducto') or hasattr(self, 'widgetEditarProducto'):
             return
 
-        if hasattr(self, 'widgetEditarProducto'):
-            return
-        
         self.widgetAgregarProducto = QWidget()
         self.uiAgregarProducto = AgregarProductoForm()
         self.uiAgregarProducto.setupUi(self.widgetAgregarProducto)
-                
-        self.verticalLayout.insertWidget(1, self.widgetAgregarProducto)
-        
-        conexion_db = conexion()
-        cursor = conexion_db.cursor()
-        query = "SELECT id_proveedor, nombre FROM proveedores;"
-        cursor.execute(query)
-        proveedores = cursor.fetchall()
+        apply_global_styles(self.widgetAgregarProducto)  # hereda estilos del helper
+        self.rootLayout.insertWidget(1, self.widgetAgregarProducto)
+
+        # 👉 stock solo lectura en el formulario de ALTA
+        if hasattr(self.uiAgregarProducto, "lineEditStock"):
+            self.uiAgregarProducto.lineEditStock.setReadOnly(True)
+            self.uiAgregarProducto.lineEditStock.setPlaceholderText("Solo lectura (ajustes desde Compras/Ventas/Obras/Ajustes)")
+            self.uiAgregarProducto.lineEditStock.setText("0")
+
+        # cargar proveedores
+        try:
+            with conexion() as conexion_db:
+                with conexion_db.cursor() as cursor:
+                    cursor.execute("SELECT id_proveedor, nombre FROM proveedores;")
+                    proveedores = cursor.fetchall()
+        except Exception as e:
+            QMessageBox.critical(None, "Error", f"No se pudieron cargar proveedores:\n{e}")
+            return
 
         self.uiAgregarProducto.comboBoxProveedore.clear()
-
         for id_proveedor, nombre in proveedores:
             self.uiAgregarProducto.comboBoxProveedore.addItem(nombre, id_proveedor)
-            self.uiAgregarProducto.comboBoxProveedore.setStyleSheet("""QComboBox {
-                background-color: #ffffff;
-                border: 1px solid #dcdcdc;
-                border-radius: 5px;
-                padding: 4px;
-            }""")
-        
+
+        # botones del form
+        if hasattr(self.uiAgregarProducto, "pushButton"):
+            self.uiAgregarProducto.pushButton.setText("Guardar")
+            make_primary(self.uiAgregarProducto.pushButton)
+        if hasattr(self.uiAgregarProducto, "pushButton_2"):
+            self.uiAgregarProducto.pushButton_2.setText("Cancelar")
         self.uiAgregarProducto.pushButton_2.clicked.connect(self.cancelar)
         self.uiAgregarProducto.pushButton.clicked.connect(self.aceptar)
-        
-        cursor.close()
-        conexion_db.close()
-        
-            
+
+
     def cancelar(self):
         if hasattr(self, 'widgetAgregarProducto'):
-            self.verticalLayout.removeWidget(self.widgetAgregarProducto)
+            self.rootLayout.removeWidget(self.widgetAgregarProducto)
             self.widgetAgregarProducto.deleteLater()
             del self.widgetAgregarProducto
         if hasattr(self, 'widgetEditarProducto'):
-            self.verticalLayout.removeWidget(self.widgetEditarProducto)
+            self.rootLayout.removeWidget(self.widgetEditarProducto)
             self.widgetEditarProducto.deleteLater()
             del self.widgetEditarProducto
-    
+
+
     def aceptar(self):
-        nombre = self.uiAgregarProducto.lineEditNombre.text()
-        precio = self.uiAgregarProducto.lineEditPrecio.text()
-        stock = self.uiAgregarProducto.lineEditStock.text()
+        nombre = self.uiAgregarProducto.lineEditNombre.text().strip()
+        precio_txt = self.uiAgregarProducto.lineEditPrecio.text().strip()
         proveedor = self.uiAgregarProducto.comboBoxProveedore.currentData()
-        descripcion = self.uiAgregarProducto.lineEditDescripcion.text()
-        
-        conexion_db = conexion()
-        
-        cursor = conexion_db.cursor()
-        
-        query = "INSERT INTO productos (nombre, precio_venta, stock_actual, id_proveedor) VALUES (%s,%s,%s,%s) RETURNING id_producto;"
-        cursor.execute(query,(nombre, precio, stock, proveedor))
-        id_producto = cursor.fetchone()[0]
-        
-        conexion_db.commit()
-        cursor.close()
-        conexion_db.close()
-        
-        self.cargar_datos(id_producto)
-        
+        descripcion = self.uiAgregarProducto.lineEditDescripcion.text().strip() if hasattr(self.uiAgregarProducto, 'lineEditDescripcion') else None
+
+        if not nombre:
+            QMessageBox.warning(None, "Validación", "Nombre es obligatorio.")
+            return
+        try:
+            precio = float(precio_txt)
+        except Exception:
+            QMessageBox.warning(None, "Validación", "Precio inválido.")
+            return
+
+        # Crea con stock_actual = 0 (no se permite setear stock desde este módulo)
+        try:
+            with conexion() as c:
+                with c.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO productos (nombre, precio_venta, stock_actual, id_proveedor, descripcion)
+                        VALUES (%s, %s, 0, %s, %s)
+                        RETURNING id_producto;
+                        """,
+                        (nombre, precio, proveedor, descripcion)
+                    )
+                    id_producto = cur.fetchone()[0]
+                c.commit()
+            self.cargar_datos(id_producto)
+        except Exception as e:
+            QMessageBox.critical(None, "Error", f"No se pudo crear el producto:\n{e}")
+
+
     def cargar_datos(self, id_producto):
-        conexion_db = conexion()
-        cursor = conexion_db.cursor()
-        query = """
-            SELECT p.id_producto,  p.nombre, p.precio_venta, p.stock_actual, pr.nombre AS proveedor
-            FROM productos p
-            JOIN proveedores pr ON p.id_proveedor = pr.id_proveedor
-            WHERE p.id_producto = %s;
-        """
-        cursor.execute(query, (id_producto,))
-        producto = cursor.fetchone()
-        
+        try:
+            with conexion() as conexion_db:
+                with conexion_db.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        SELECT p.id_producto, p.nombre, p.precio_venta, p.stock_actual, pr.nombre AS proveedor
+                        FROM productos p
+                        LEFT JOIN proveedores pr ON p.id_proveedor = pr.id_proveedor
+                        WHERE p.id_producto = %s;
+                        """, (id_producto,)
+                    )
+                    producto = cursor.fetchone()
+        except Exception as e:
+            QMessageBox.critical(None, "Error", f"No se pudo cargar el producto {id_producto}:\n{e}")
+            return
+
         if producto:
             row_count = self.tableWidget.rowCount()
             self.tableWidget.insertRow(row_count)
-            id_producto = producto[0]
-        
+
+            # ID, Nombre, Precio, Stock, Proveedor
             for col, valor in enumerate(producto):
-                item = QTableWidgetItem(str(valor))
+                val_str = self._format_cell(col, valor)
+                item = QTableWidgetItem(val_str)
                 item.setTextAlignment(Qt.AlignCenter)
                 self.tableWidget.setItem(row_count, col, item)
 
-            boton_editar = QPushButton("Editar")
-            boton_editar.setStyleSheet("background-color: #3498db; color: white; border-radius: 5px; padding: 4px;")
-            boton_editar.clicked.connect(lambda _, pid=producto[0]: self.mostrar_formulario_editar(pid))
-            
-            contenedor = QWidget()
-            layout = QHBoxLayout(contenedor)
-            layout.setAlignment(Qt.AlignCenter) 
-            layout.setContentsMargins(0, 0, 0, 0) 
-            
-            boton_eliminar = QPushButton("Eliminar")
-            boton_eliminar.setStyleSheet("background-color: #e00000; color: white; border-radius: 5px; padding: 4px;")
-            boton_eliminar.clicked.connect(lambda _, r=row_count: self.eliminar_producto(r))
-            self.tableWidget.setCellWidget(row_count, 5, contenedor)
-        
-            layout.addWidget(boton_editar)
-            layout.addWidget(boton_eliminar)
-                            
-            cursor.close()
-            conexion_db.close()    
+            self._colocar_botones_opciones(row_count, producto[0])
+            self.ajustar_columnas()
             self.cancelar()
-            
+
+
     def cargar_todos_los_productos(self):
-        conexion_db = conexion()
-        cursor = conexion_db.cursor()
+        try:
+            with conexion() as conexion_db:
+                with conexion_db.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        SELECT p.id_producto, p.nombre, p.precio_venta, p.stock_actual, pr.nombre AS proveedor
+                        FROM productos p
+                        LEFT JOIN proveedores pr ON p.id_proveedor = pr.id_proveedor;
+                        """
+                    )
+                    productos = cursor.fetchall()
+        except Exception as e:
+            QMessageBox.critical(None, "Error", f"No se pudieron cargar productos:\n{e}")
+            return
 
-        query = """
-            SELECT p.id_producto, p.nombre, p.precio_venta, p.stock_actual, pr.nombre AS proveedor
-            FROM productos p
-            JOIN proveedores pr ON p.id_proveedor = pr.id_proveedor;
-        """
-        cursor.execute(query)
-        productos = cursor.fetchall()
-
-        self.tableWidget.setRowCount(0) 
-
+        self.tableWidget.setRowCount(0)
         for producto in productos:
             row_count = self.tableWidget.rowCount()
             self.tableWidget.insertRow(row_count)
-            #id_producto = producto[0] 
 
             for col, valor in enumerate(producto):
-                item = QTableWidgetItem(str(valor))
+                val_str = self._format_cell(col, valor)
+                item = QTableWidgetItem(val_str)
                 item.setTextAlignment(Qt.AlignCenter)
                 self.tableWidget.setItem(row_count, col, item)
-                
-            contenedor = QWidget()
-            layout = QHBoxLayout(contenedor)
-            layout.setAlignment(Qt.AlignCenter) 
-            layout.setContentsMargins(0, 0, 0, 0) 
 
-            boton_editar = QPushButton("Editar")
-            boton_editar.setStyleSheet("background-color: #3498db; color: white; border-radius: 5px; padding: 4px;")
-            boton_editar.clicked.connect(lambda _, pid=producto[0]: self.mostrar_formulario_editar(pid))
+            self._colocar_botones_opciones(row_count, producto[0])
 
-            boton_eliminar = QPushButton("Eliminar")
-            boton_eliminar.setStyleSheet("background-color: #e00000; color: white; border-radius: 5px; padding: 4px;")
-            boton_eliminar.clicked.connect(lambda _, pid=producto[0]: self.eliminar_producto(pid))
-            
-            layout.addWidget(boton_editar)
-            layout.addWidget(boton_eliminar)
-            self.tableWidget.setCellWidget(row_count, 5, contenedor)
+        self.ajustar_columnas()
 
-        cursor.close()
-        conexion_db.close()
-        
+
+    def _colocar_botones_opciones(self, fila: int, id_producto: int):
+        contenedor = QWidget()
+        layout = QHBoxLayout(contenedor)
+        layout.setAlignment(Qt.AlignCenter)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+
+        boton_editar = QPushButton("Editar")
+        boton_eliminar = QPushButton("Eliminar")
+
+        make_primary(boton_editar)
+        make_danger(boton_eliminar)
+
+        boton_editar.setMinimumHeight(28)
+        boton_eliminar.setMinimumHeight(28)
+
+        boton_editar.clicked.connect(lambda _, pid=id_producto: self.mostrar_formulario_editar(pid))
+        boton_eliminar.clicked.connect(lambda _, pid=id_producto: self.eliminar_producto(pid))
+
+        layout.addWidget(boton_editar)
+        layout.addWidget(boton_eliminar)
+        self.tableWidget.setCellWidget(fila, 5, contenedor)
+
+
+    def _format_cell(self, col: int, valor):
+        """Formatea celdas para mejor legibilidad (precio con 2 decimales)."""
+        if col == 2:  # Precio
+            try:
+                v = float(valor)
+                return f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")  # formato 1.234,56
+            except Exception:
+                return str(valor)
+        return str(valor)
+
+
     def eliminar_producto(self, id_producto):
-        confirm = QMessageBox.question(None, "Eliminar", "¿Estás seguro de eliminar este producto?",
-            QMessageBox.Yes | QMessageBox.No)
-        if confirm == QMessageBox.Yes:
-            
-            conexion_db = conexion()
-            cursor = conexion_db.cursor()
-            query = "DELETE FROM productos WHERE id_producto = %s;"
-            cursor.execute(query, (id_producto,))
-            conexion_db.commit()
-            cursor.close()
-            conexion_db.close()
-            
-            for fila in range(self.tableWidget.rowCount()):
-                item = self.tableWidget.item(fila, 0)
-                if item and int(item.text()) == id_producto:
-                    self.tableWidget.removeRow(fila)
-                    break
-                
+        confirm = QMessageBox.question(
+            None, "Eliminar",
+            f"¿Eliminar el producto {id_producto}? Si tiene movimientos/ventas/compras no se podrá borrar.",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if confirm != QMessageBox.Yes:
+            return
+
+        try:
+            with conexion() as c:
+                with c.cursor() as cur:
+                    # pre-chequeo amigable
+                    cur.execute("SELECT EXISTS (SELECT 1 FROM movimientos_stock WHERE id_producto=%s LIMIT 1);", (id_producto,))
+                    tiene_kardex = cur.fetchone()[0]
+                    cur.execute("SELECT EXISTS (SELECT 1 FROM ventas_detalle WHERE id_producto=%s LIMIT 1);", (id_producto,))
+                    en_ventas = cur.fetchone()[0]
+                    cur.execute("SELECT EXISTS (SELECT 1 FROM compra_detalles WHERE id_producto=%s LIMIT 1);", (id_producto,))
+                    en_compras = cur.fetchone()[0]
+
+                    if tiene_kardex or en_ventas or en_compras:
+                        msg = "No se puede eliminar el producto porque:\n"
+                        if tiene_kardex: msg += "• Tiene movimientos en el kardex (movimientos_stock)\n"
+                        if en_ventas:    msg += "• Está usado en ventas_detalle\n"
+                        if en_compras:   msg += "• Está usado en compra_detalles\n"
+                        msg += "\nSugerencia: marcar como Inactivo/oculto en lugar de borrar."
+                        QMessageBox.warning(None, "No se puede eliminar", msg)
+                        return
+
+                    cur.execute("DELETE FROM productos WHERE id_producto = %s;", (id_producto,))
+                c.commit()
+        except Exception as e:
+            QMessageBox.critical(None, "No se pudo eliminar", f"El producto {id_producto} no pudo eliminarse.\nDetalle: {e}")
+            return
+
+        # quitar de la UI
+        for fila in range(self.tableWidget.rowCount()):
+            item = self.tableWidget.item(fila, 0)
+            if item and int(item.text()) == id_producto:
+                self.tableWidget.removeRow(fila)
+                break
+
+        self.ajustar_columnas()
+
+
+    # ---------- EDICIÓN ----------
     def mostrar_formulario_editar(self, id_producto):
-        if hasattr(self, 'widgetEditarProducto'):
+        if hasattr(self, 'widgetEditarProducto') or hasattr(self, 'widgetAgregarProducto'):
             return
-        
-        if hasattr(self, 'widgetAgregarProducto'):
-            return
-        
+
         self.widgetEditarProducto = QWidget()
         self.uiEditarProducto = AgregarProductoForm()
         self.uiEditarProducto.setupUi(self.widgetEditarProducto)
-        self.verticalLayout.insertWidget(1, self.widgetEditarProducto)
+        apply_global_styles(self.widgetEditarProducto)
+        self.rootLayout.insertWidget(1, self.widgetEditarProducto)
 
-        conexion_db = conexion()
-        cursor = conexion_db.cursor()
-        query = "SELECT nombre, precio_venta, stock_actual, descripcion, id_proveedor FROM productos WHERE id_producto = %s;"
-        cursor.execute(query, (id_producto,))
-        producto = cursor.fetchone()
-        cursor.close()
-        conexion_db.close()
+        # 👉 stock solo lectura también en EDICIÓN
+        if hasattr(self.uiEditarProducto, "lineEditStock"):
+            self.uiEditarProducto.lineEditStock.setReadOnly(True)
+            self.uiEditarProducto.lineEditStock.setPlaceholderText("Solo lectura (ajustes desde Compras/Ventas/Obras/Ajustes)")
 
-        if producto:
-            nombre, precio, stock, descripcion ,proveedor = producto
-
-            self.uiEditarProducto.lineEditNombre.setText(nombre)
-            self.uiEditarProducto.lineEditPrecio.setText(str(precio))
-            self.uiEditarProducto.lineEditStock.setText(str(stock))
-            self.uiEditarProducto.lineEditDescripcion.setText(descripcion)  # si querés
-
-            # cargar combo de proveedores como antes
-            conexion_db = conexion()
-            cursor = conexion_db.cursor()
-            cursor.execute("SELECT id_proveedor, nombre FROM proveedores")
-            proveedores = cursor.fetchall()
-            self.uiEditarProducto.comboBoxProveedore.clear()
-            for idp, nombrep in proveedores:
-                self.uiEditarProducto.comboBoxProveedore.addItem(nombrep, idp)
-                if idp == proveedor:
-                    self.uiEditarProducto.comboBoxProveedore.setCurrentIndex(
-                        self.uiEditarProducto.comboBoxProveedore.count() - 1
+        # leer datos actuales
+        try:
+            with conexion() as c:
+                with c.cursor() as cur:
+                    cur.execute(
+                        "SELECT nombre, precio_venta, stock_actual, descripcion, id_proveedor FROM productos WHERE id_producto = %s;",
+                        (id_producto,)
                     )
-            cursor.close()
-            conexion_db.close()
+                    producto = cur.fetchone()
+        except Exception as e:
+            QMessageBox.critical(None, "Error", f"No se pudo leer el producto:\n{e}")
+            return
 
-            # cone
-            self.uiEditarProducto.pushButton_2.clicked.connect(self.cancelar)
-            self.uiEditarProducto.pushButton.clicked.connect(lambda: self.editar_producto(id_producto))
-            
+        if not producto:
+            QMessageBox.warning(None, "Aviso", "Producto no encontrado.")
+            return
+
+        nombre, precio, stock_db, descripcion, proveedor = producto
+
+        self.uiEditarProducto.lineEditNombre.setText(nombre)
+        self.uiEditarProducto.lineEditPrecio.setText(str(precio))
+        self.uiEditarProducto.lineEditStock.setText(str(stock_db))
+        if hasattr(self.uiEditarProducto, 'lineEditDescripcion') and descripcion is not None:
+            self.uiEditarProducto.lineEditDescripcion.setText(descripcion)
+
+        # proveedores
+        try:
+            with conexion() as c:
+                with c.cursor() as cur:
+                    cur.execute("SELECT id_proveedor, nombre FROM proveedores;")
+                    proveedores = cur.fetchall()
+        except Exception as e:
+            QMessageBox.critical(None, "Error", f"No se pudo cargar proveedores:\n{e}")
+            return
+
+        self.uiEditarProducto.comboBoxProveedore.clear()
+        for idp, nombrep in proveedores:
+            self.uiEditarProducto.comboBoxProveedore.addItem(nombrep, idp)
+            if idp == proveedor:
+                self.uiEditarProducto.comboBoxProveedore.setCurrentIndex(self.uiEditarProducto.comboBoxProveedore.count()-1)
+
+        # botones del form
+        if hasattr(self.uiEditarProducto, "pushButton"):
+            self.uiEditarProducto.pushButton.setText("Guardar cambios")
+            make_primary(self.uiEditarProducto.pushButton)
+        if hasattr(self.uiEditarProducto, "pushButton_2"):
+            self.uiEditarProducto.pushButton_2.setText("Cancelar")
+        self.uiEditarProducto.pushButton_2.clicked.connect(self.cancelar)
+        self.uiEditarProducto.pushButton.clicked.connect(lambda: self.editar_producto(id_producto))
+
+
     def editar_producto(self, id_producto):
-    # ─── 1. Leer y validar campos ────────────────────────────
-        nombre     = self.uiEditarProducto.lineEditNombre.text()
-        precio_txt = self.uiEditarProducto.lineEditPrecio.text()
-        stock_txt  = self.uiEditarProducto.lineEditStock.text()
-        proveedor  = self.uiEditarProducto.comboBoxProveedore.currentData()
+        nombre = self.uiEditarProducto.lineEditNombre.text().strip()
+        precio_txt = self.uiEditarProducto.lineEditPrecio.text().strip()
+        proveedor = self.uiEditarProducto.comboBoxProveedore.currentData()
+        descripcion = self.uiEditarProducto.lineEditDescripcion.text().strip() if hasattr(self.uiEditarProducto, 'lineEditDescripcion') else None
 
         try:
             precio = float(precio_txt)
-            stock  = int(stock_txt)
-        except ValueError:
-            QMessageBox.warning(None, "Error",
-                                "Precio debe ser número y stock un entero.")
+        except Exception:
+            QMessageBox.warning(None, "Validación", "Precio inválido.")
             return
 
-        # ─── 2. Actualizar en la BD ──────────────────────────────
-        with conexion() as c:
-            with c.cursor() as cur:
-                cur.execute(
-                    """
-                    UPDATE productos
-                    SET nombre = %s,
-                        precio_venta = %s,
-                        stock_actual = %s,
-                        id_proveedor = %s
-                    WHERE id_producto = %s
-                    RETURNING id_producto;
-                    """,
-                    (nombre, precio, stock, proveedor, id_producto)
-                )
-            c.commit()
+        # actualizar SOLO datos base (stock no se toca aquí)
+        try:
+            with conexion() as c:
+                with c.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE productos
+                        SET nombre=%s, precio_venta=%s, id_proveedor=%s, descripcion=%s
+                        WHERE id_producto=%s;
+                        """,
+                        (nombre, precio, proveedor, descripcion, id_producto)
+                    )
+                c.commit()
+        except Exception as e:
+            QMessageBox.critical(None, "Error", f"No se pudo actualizar el producto:\n{e}")
+            return
 
-        # ─── 3. Actualizar la tabla sin que “salte” ──────────────
-        self.tableWidget.setSortingEnabled(False)          # congela orden
+        # refrescar fila
+        self.tableWidget.setSortingEnabled(False)
+        try:
+            with conexion() as c:
+                with c.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT p.id_producto, p.nombre, p.precio_venta, p.stock_actual, pr.nombre AS proveedor
+                        FROM productos p
+                        LEFT JOIN proveedores pr ON p.id_proveedor = pr.id_proveedor
+                        WHERE p.id_producto = %s;
+                        """, (id_producto,)
+                    )
+                    prod = cur.fetchone()
+        except Exception as e:
+            QMessageBox.warning(None, "Aviso", f"Actualizado, pero no se pudo refrescar la tabla:\n{e}")
+            self.cancelar()
+            return
 
-        for fila in range(self.tableWidget.rowCount()):
-            item_id = self.tableWidget.item(fila, 0)
-            if item_id and int(item_id.text()) == id_producto:
+        if prod:
+            for fila in range(self.tableWidget.rowCount()):
+                item_id = self.tableWidget.item(fila, 0)
+                if item_id and int(item_id.text()) == id_producto:
+                    self.tableWidget.item(fila, 1).setText(str(prod[1]))
+                    self.tableWidget.item(fila, 2).setText(self._format_cell(2, prod[2]))
+                    self.tableWidget.item(fila, 3).setText(str(prod[3]))
+                    self.tableWidget.item(fila, 4).setText(str(prod[4]))
+                    break
 
-                # Columna 1: Nombre
-                self.tableWidget.item(fila, 1).setText(nombre)
-
-                # Columna 2: Precio
-                self.tableWidget.item(fila, 2).setText(str(precio))
-
-                # Columna 3: Stock
-                self.tableWidget.item(fila, 3).setText(str(stock))
-
-                # Columna 4: Proveedor
-                proveedor_txt = (
-                    self.uiEditarProducto.comboBoxProveedore.currentText()
-                )
-                self.tableWidget.item(fila, 4).setText(proveedor_txt)
-
-                break
-
-        self.tableWidget.setSortingEnabled(True)           # vuelve orden
-
-        # ─── 4. Cerrar formulario de edición ─────────────────────
+        self.tableWidget.setSortingEnabled(True)
+        self.ajustar_columnas()
         self.cancelar()
+
+
+    # ---------- BÚSQUEDA / COLUMNAS ----------
+    def filtrar_tabla(self, texto: str):
+        """Filtra por Nombre (col 1) o Proveedor (col 4)."""
+        query = (texto or "").strip().lower()
+        for fila in range(self.tableWidget.rowCount()):
+            nombre_item = self.tableWidget.item(fila, 1)
+            prov_item = self.tableWidget.item(fila, 4)
+            nombre = nombre_item.text().lower() if nombre_item else ""
+            proveedor = prov_item.text().lower() if prov_item else ""
+            visible = (query in nombre) or (query in proveedor)
+            self.tableWidget.setRowHidden(fila, not visible)
+
+    def ajustar_columnas(self):
+        """Asegura columnas iguales (1..4) y opciones más chica."""
+        header = self.tableWidget.horizontalHeader()
+        # Igualar 1..4 como Stretch y que ocupen el espacio disponible
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.Stretch)
+        header.setSectionResizeMode(3, QHeaderView.Stretch)
+        header.setSectionResizeMode(4, QHeaderView.Stretch)
+
+        # Opciones a contenido con mínimo
+        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)
+        # Asegurar mínimo de opciones
+        current_width = self.tableWidget.columnWidth(5)
+        if current_width < OPCIONES_MIN_WIDTH:
+            self.tableWidget.setColumnWidth(5, OPCIONES_MIN_WIDTH)
+
+
 if __name__ == "__main__":
-    import sys
     app = QApplication(sys.argv)
     Form = QWidget()
     ui = Ui_Form()

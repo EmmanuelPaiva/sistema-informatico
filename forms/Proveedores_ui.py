@@ -4,7 +4,8 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from PySide6.QtCore import (QCoreApplication, Qt, QMetaObject, QPropertyAnimation, QRect, QEvent, QObject)
 from PySide6.QtWidgets import (QApplication, QFrame, QGridLayout, QLabel, QLineEdit,
-                               QPushButton, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QTableWidget, QHeaderView)
+                               QPushButton, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QTableWidget, QHeaderView,
+                               QFileDialog, QMessageBox)  # <-- añadidos para exportar
 from forms.agregarProveedor import Ui_Form as FormularioProv
 from db.prov_queries import (
     guardar_registro,
@@ -14,6 +15,16 @@ from db.prov_queries import (
     obtener_proveedor_por_id,
 )
 
+# ==== Estilos/helpers del sistema ====
+try:
+    from ui_helpers import apply_global_styles, mark_title, make_primary, style_table, style_search
+except ModuleNotFoundError:
+    from forms.ui_helpers import apply_global_styles, mark_title, make_primary, style_table, style_search
+
+# Exportar a Excel
+from reports.excel import export_qtable_to_excel
+
+ROW_HEIGHT = 46   # filas un poquito más separadas
 
 class Ui_Form(object):
     def setupUi(self, Form):
@@ -123,8 +134,10 @@ class Ui_Form(object):
         self.label_title = QLabel(self.header_frame)
         self.label_title.setText("Proveedores")
         self.header_layout.addWidget(self.label_title)
+        # estilos del sistema para título
+        mark_title(self.label_title)
 
-        # Search + Button aligned
+        # Search + Buttons aligned
         self.search_layout = QHBoxLayout()
         self.search_layout.setContentsMargins(0, 0, 0, 0)
         self.search_layout.setSpacing(10)
@@ -134,11 +147,21 @@ class Ui_Form(object):
         self.lineEdit.setMinimumWidth(int(Form.width() * 0.5))
         self.lineEdit.setAlignment(Qt.AlignmentFlag.AlignLeft)
         self.search_layout.addWidget(self.lineEdit)
+        # estilo buscador
+        style_search(self.lineEdit)
         
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.search_layout.addWidget(spacer)
 
+        # Botón Exportar (nuevo)
+        self.btnExportar = QPushButton(self.header_frame)
+        self.btnExportar.setText("Exportar")
+        self.btnExportar.setFixedWidth(120)
+        self.btnExportar.setMinimumHeight(22)
+        self.btnExportar.clicked.connect(self.exportar_excel_proveedores)
+        self.search_layout.addWidget(self.btnExportar)
+        make_primary(self.btnExportar)
 
         self.newButton = QPushButton(self.header_frame)
         self.newButton.setText("Nuevo proveedor")
@@ -146,7 +169,7 @@ class Ui_Form(object):
         self.newButton.setMinimumHeight(22)   
         self.search_layout.addWidget(self.newButton)
         self.newButton.clicked.connect(lambda: self.abrir_formulario(Form))
-        
+        make_primary(self.newButton)
 
         self.header_layout.addLayout(self.search_layout)
         self.gridLayout.addWidget(self.header_frame, 0, 0, 1, 1)
@@ -165,9 +188,20 @@ class Ui_Form(object):
         self.tableWidget.setColumnCount(6)
         self.tableWidget.setHorizontalHeaderLabels(["ID", "Nombre", "Teléfono", "Dirección", "Email", "Opciones"])
         header = self.tableWidget.horizontalHeader()
-        header.setStretchLastSection(True)
-        for col in range(self.tableWidget.columnCount()):
-            header.setSectionResizeMode(col, QHeaderView.Stretch)
+        header.setStretchLastSection(False)  # control manual de "Opciones"
+        # tamaños de columna: datos Stretch y Opciones a contenido
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # ID
+        header.setSectionResizeMode(1, QHeaderView.Stretch)           # Nombre
+        header.setSectionResizeMode(2, QHeaderView.Stretch)           # Teléfono
+        header.setSectionResizeMode(3, QHeaderView.Stretch)           # Dirección
+        header.setSectionResizeMode(4, QHeaderView.Stretch)           # Email
+        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # Opciones (no se corta)
+        # filas con un poco más de aire
+        self.tableWidget.verticalHeader().setDefaultSectionSize(ROW_HEIGHT)
+
+        # estilos de tabla del sistema
+        style_table(self.tableWidget)
+
         self.verticalLayout.addWidget(self.tableWidget)
 
         self.gridLayout.addWidget(self.table_frame, 1, 0, 1, 1)
@@ -180,11 +214,30 @@ class Ui_Form(object):
         # Cargar proveedores inicialmente (pasa el callback de edición y el widget Form)
         cargar_proveedores(self.tableWidget, edit_callback=self.abrir_formulario_editar, main_form_widget=Form)
 
+        # aplicar estilos globales del sistema
+        apply_global_styles(Form)
+
         self.retranslateUi(Form)
         QMetaObject.connectSlotsByName(Form)
 
     def retranslateUi(self, Form):
         Form.setWindowTitle(QCoreApplication.translate("Form", u"Proveedores", None))
+    
+    # Exportar a Excel
+    def exportar_excel_proveedores(self):
+        try:
+            ruta, _ = QFileDialog.getSaveFileName(
+                None,
+                "Guardar como",
+                "Proveedores.xlsx",
+                "Excel (*.xlsx)"
+            )
+            if not ruta:
+                return
+            export_qtable_to_excel(self.tableWidget, ruta, title="Proveedores")
+            QMessageBox.information(None, "Éxito", "Exportación completada.")
+        except Exception as e:
+            QMessageBox.critical(None, "Error", f"No se pudo exportar:\n{e}")
         
     def cancelar(self, Form):
         if hasattr(self, 'formularioProveedor') and self.formularioProveedor.isVisible():

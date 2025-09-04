@@ -2,7 +2,7 @@ from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QTextEdit, QDateEdit, QDoubleSpinBox, QGridLayout, QSizePolicy, QComboBox
+    QTextEdit, QDateEdit, QDoubleSpinBox, QGridLayout, QSizePolicy, QComboBox, QMessageBox
 )
 
 class FormularioNuevaObra(QWidget):
@@ -24,19 +24,42 @@ class FormularioNuevaObra(QWidget):
         grid = QGridLayout()
         grid.setSpacing(12)
 
+        # Widgets
         self.input_nombre = QLineEdit()
+        self.input_nombre.setPlaceholderText("Ej.: Vivienda unifamiliar – Barrio X")
+
         self.input_direccion = QLineEdit()
+        self.input_direccion.setPlaceholderText("Calle / Ciudad")
+
         self.input_fecha_inicio = QDateEdit()
+        self.input_fecha_inicio.setCalendarPopup(True)
+        self.input_fecha_inicio.setDisplayFormat("yyyy-MM-dd")
+        self.input_fecha_inicio.setDate(QDate.currentDate())
+
         self.input_fecha_fin = QDateEdit()
+        self.input_fecha_fin.setCalendarPopup(True)
+        self.input_fecha_fin.setDisplayFormat("yyyy-MM-dd")
+        self.input_fecha_fin.setDate(QDate.currentDate().addDays(30))
+
         self.input_estado = QComboBox()
         self.input_estado.addItems(["En progreso", "Pausado", "Finalizado"])
+
         self.input_metros = QDoubleSpinBox()
-        self.input_metros.setMaximum(99999)
+        self.input_metros.setMaximum(9999999)
+        self.input_metros.setDecimals(2)
+        self.input_metros.setSingleStep(1.0)
         self.input_metros.setSuffix(" m²")
+        self.input_metros.setValue(0.00)
+
         self.input_presupuesto = QDoubleSpinBox()
-        self.input_presupuesto.setMaximum(999999999)
+        self.input_presupuesto.setMaximum(9999999999)
+        self.input_presupuesto.setDecimals(2)
+        self.input_presupuesto.setSingleStep(10000.0)
         self.input_presupuesto.setPrefix("Gs. ")
+        self.input_presupuesto.setValue(0.00)
+
         self.input_descripcion = QTextEdit()
+        self.input_descripcion.setPlaceholderText("Notas / alcance / detalles…")
 
         # Fila 0
         grid.addWidget(QLabel("Nombre de la Obra:"), 0, 0)
@@ -75,18 +98,32 @@ class FormularioNuevaObra(QWidget):
         botones_layout.addWidget(self.btn_aceptar)
 
         layout.addLayout(botones_layout)
-        
+
     def obtener_datos(self):
         nombre = self.input_nombre.text().strip()
         direccion = self.input_direccion.text().strip()
-        fecha_inicio = self.input_fecha_inicio.date().toPython()
-        fecha_fin = self.input_fecha_fin.date().toPython()
+        fecha_inicio = self.input_fecha_inicio.date().toPython()  # datetime.date
+        fecha_fin = self.input_fecha_fin.date().toPython()        # datetime.date
         estado = self.input_estado.currentText()
-        metros = self.input_metros.value()
-        presupuesto = self.input_presupuesto.value()
+        metros = float(self.input_metros.value())                  # float -> numeric en DB
+        presupuesto = float(self.input_presupuesto.value())        # float -> numeric en DB
         descripcion = self.input_descripcion.toPlainText().strip()
 
-        if not nombre or not direccion or metros <= 0 or presupuesto <= 0:
+        # Validaciones básicas
+        if not nombre or not direccion:
+            QMessageBox.warning(self, "Validación", "Nombre y Dirección son obligatorios.")
+            return None
+
+        if metros <= 0:
+            QMessageBox.warning(self, "Validación", "Metros cuadrados debe ser mayor que 0.")
+            return None
+
+        if presupuesto <= 0:
+            QMessageBox.warning(self, "Validación", "El presupuesto total debe ser mayor que 0.")
+            return None
+
+        if fecha_fin < fecha_inicio:
+            QMessageBox.warning(self, "Validación", "La fecha de entrega no puede ser anterior a la fecha de inicio.")
             return None
 
         return {
@@ -106,8 +143,8 @@ class FormularioNuevaObra(QWidget):
         self.input_fecha_inicio.setDate(QDate.currentDate())
         self.input_fecha_fin.setDate(QDate.currentDate())
         self.input_estado.setCurrentIndex(0)
-        self.input_metros.setValue(0)
-        self.input_presupuesto.setValue(0)
+        self.input_metros.setValue(0.00)
+        self.input_presupuesto.setValue(0.00)
         self.input_descripcion.clear()
 
     def estilos(self):
