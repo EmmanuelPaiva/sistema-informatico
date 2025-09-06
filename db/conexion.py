@@ -1,19 +1,22 @@
+# db/conexion.py
+import os
 import psycopg2
+from dotenv import load_dotenv
+
+# Cargar .env
+load_dotenv()
 
 def conexion():
-        try:
-            conexion = psycopg2.connect(
-                host="localhost",
-                database="postgres",
-                user="postgres",
-                password="48884368"
-            )
-            return conexion
-            print("Conexión exitosa a la base de datos")
-        except psycopg2.Error as e:
-            print("Error al conectar a la base de datos:", e)
-            conexion = None
+    url = os.getenv("DATABASE_URL")
+    if url is None:
+        raise ValueError("No se encontró DATABASE_URL en el .env")
     
+    # Supabase requiere sslmode=require
+    if "sslmode=" not in url:
+        sep = "&" if "?" in url else "?"
+        url = f"{url}{sep}sslmode=require"
+
+    return psycopg2.connect(url)
 
 
 
