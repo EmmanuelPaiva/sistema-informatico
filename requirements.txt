@@ -1,0 +1,29 @@
+# --- Core GUI ---
+PySide6>=6.6
+
+# --- Data & Excel ---
+pandas>=2.2
+openpyxl>=3.1
+numpy>=1.26
+XlsxWriter>=3.2        # para exportaciones avanzadas de Excel
+
+# --- Reports / Documentos ---
+reportlab>=4.1         # generación de PDF
+python-docx>=1.1       # generación de Word
+python-pptx>=0.6.23    # generación de PowerPoint
+pypandoc>=1.13         # exportar a .txt, .rtf, .md, etc.
+
+# --- Database ---
+psycopg2-binary>=2.9   # conexión PostgreSQL (Supabase)
+SQLAlchemy>=2.0        # ORM y migraciones (si después usás Alembic)
+alembic>=1.13          # migraciones de base de datos
+
+# --- Env & Utils ---
+python-dotenv>=1.0     # manejo de variables .env
+requests>=2.31         # consumo de APIs
+certifi>=2024.7.4      # certificados SSL actualizados
+
+# --- Extras útiles ---
+matplotlib>=3.9        # gráficos (para dashboard de obras/ventas)
+seaborn>=0.13          # visualización más estética
+tabulate>=0.9          # tablas bonitas en consola
