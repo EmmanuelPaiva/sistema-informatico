@@ -1,8 +1,12 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from db.conexion import conexion
 from PySide6.QtWidgets import QSpinBox, QComboBox, QTableWidgetItem, QPushButton, QWidget, QTreeWidgetItem, QHBoxLayout
 from PySide6.QtGui import QColor, QBrush, QFont
 from PySide6.QtCore import Qt, QDateTime
 from utils.utilsCompras import calcular_total_general
+
 
 
 # ---------- CALCULAR SUBTOTAL FILA ----------
@@ -109,7 +113,7 @@ def obtener_productos_por_proveedor(proveedor_id):
 
 
 def on_proveedor_selected(ui_nueva_compra):
-    proveedor_id = ui_nueva_compra.comboBox.currentData()
+    proveedor_id = ui_nueva_compra.comboBox.currentData() 
     productos = obtener_productos_por_proveedor(proveedor_id)
 
     if not productos:

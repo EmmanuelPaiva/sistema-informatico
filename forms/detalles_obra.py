@@ -641,44 +641,58 @@ class DetallesObraWidget(QWidget):
         # Datos del consumo de stock (si aplica)
         usa_producto = bool(datos.get("usa_producto"))
         id_producto = datos.get("id_producto") if usa_producto else None
+        if usa_producto and id_producto is not None:
+            try:
+                id_producto = int(id_producto)
+            except Exception:
+                id_producto = None  # fallback limpio, se validará abajo
 
-        if not concepto and not (usa_producto and id_producto):
-            QMessageBox.warning(self, "Datos incompletos", "La descripción (concepto) es obligatoria.")
+        # Validaciones mínimas (respetando reglas del esquema)
+        if usa_producto:
+            if not id_producto:
+                QMessageBox.warning(self, "Datos incompletos", "Seleccioná un producto para el gasto de Material.")
+                return
+            if cantidad <= 0:
+                QMessageBox.warning(self, "Datos incompletos", "La cantidad debe ser mayor a 0.")
+                return
+            # Si no viene concepto, autogenerar "Material: <nombre>"
+            if not concepto:
+                try:
+                    conn = conexion(); cur = conn.cursor()
+                    cur.execute("SELECT nombre FROM productos WHERE id_producto = %s", (id_producto,))
+                    row = cur.fetchone()
+                    if row:
+                        concepto = f"Material: {row[0]}"
+                except Exception:
+                    pass
+                finally:
+                    try: cur.close(); conn.close()
+                    except Exception: pass
+
+            # Asegurar tipo "Material"
+            if not tipo:
+                tipo = "Material"
+
+        elif not concepto:
+            QMessageBox.warning(self, "Datos incompletos", "Ingresá una descripción para el gasto.")
             return
 
         try:
             conn = conexion(); cur = conn.cursor()
 
-            # 1) Insertar gasto contable
-            if usa_producto and id_producto and not concepto:
-                cur.execute("SELECT nombre FROM productos WHERE id_producto = %s", (id_producto,))
-                row = cur.fetchone()
-                if row:
-                    concepto = f"Material: {row[0]}"
-
+            # Insertar gasto; incluir id_producto (NULL si no material)
             cur.execute("""
-                INSERT INTO gastos (trabajo_id, tipo, concepto, unidad, cantidad, costo_unitario, fecha)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO gastos (trabajo_id, tipo, concepto, unidad, cantidad, costo_unitario, fecha, id_producto)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
-            """, (trabajo_id, tipo if tipo else ("Material" if usa_producto else ""),
-                  concepto, unidad, cantidad, costo_unitario, fecha_val))
+            """, (trabajo_id, tipo, concepto, unidad, cantidad, costo_unitario, fecha_val, id_producto))
+
             cur.fetchone()
 
-            # 2) Descontar stock si corresponde (CAST explícito para coincidir con la firma)
-            if usa_producto and id_producto and cantidad > 0:
-                cur.execute(
-                    """
-                    SELECT fn_mov(
-                        %s::bigint,     -- id_producto
-                        %s::smallint,   -- signo (-1 salida)
-                        %s::numeric,    -- cantidad
-                        %s::text,       -- origen
-                        %s::bigint,     -- referencia_id (id_obra)
-                        %s::text        -- nota
-                    );
-                    """,
-                    (int(id_producto), -1, cantidad, 'obra', int(self.id_obra), 'Consumo en obra')
-                )
+            # IMPORTANTE:
+            # No llamamos a fn_mov ni tocamos inventario aquí.
+            # tg_sync_gasto_a_consumo (AFTER I/U/D) creará/actualizará/borrará el registro en obras_consumos,
+            # y los triggers de obras_consumos gestionan movimientos_stock automáticamente.
 
             conn.commit()
 

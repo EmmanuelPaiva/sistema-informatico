@@ -16,6 +16,18 @@ from forms.Ventas_ui import Ui_Form as VentasForm
 from forms.Clientes_ui import Ui_Form as ClientesForm
 from forms.Proveedores_ui import Ui_Form as ProveedoresForm
 
+# === NUEVOS IMPORTS PARA GRÁFICOS ===
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+
+# Si guardaste el módulo que te pasé como forms/graficos_dashboard.py:
+from forms.graficos_dashboard import (
+    create_ventas_vs_compras_mensuales,
+    create_gastos_mensuales,
+    create_presupuesto_vs_gasto_por_obra,
+    create_distribucion_gastos_por_tipo,
+    create_stock_critico,
+    create_top_materiales_mes,
+)
 
 # =============== Paleta clara (predomina blanco + celestes) ===============
 QSS_RODLER_LIGHT = """
@@ -238,22 +250,49 @@ class Ui_MainWindow(object):
         # === STACKED (contenido) ===
         self.stackedWidget = QStackedWidget(self.mainContainer)
 
-        # Dashboard (Inicio)
+        # Dashboard (Inicio) — RECREADO
         self.paginaPrincipal = QWidget()
         self.paginaPrincipal.setObjectName("paginaPrincipal")
         dashboard_layout = QGridLayout(self.paginaPrincipal)
         dashboard_layout.setContentsMargins(16, 16, 16, 16)
         dashboard_layout.setSpacing(12)
 
-        self.tarjeta1 = self.crear_tarjeta("Estadística 1", "tarjetaDashboard")
-        self.tarjeta2 = self.crear_tarjeta("Estadística 2", "tarjetaDashboard")
-        self.tarjeta3 = self.crear_tarjeta("Estadística 3", "tarjetaDashboard")
-        self.tarjeta4 = self.crear_tarjeta("Estadística 4", "tarjetaDashboard")
+        # Helper para tarjetas con título + contenedor de chart
+        def make_card(title: str):
+            frame = QFrame()
+            frame.setObjectName("tarjetaDashboard")
+            lay = QVBoxLayout(frame)
+            lay.setContentsMargins(16, 16, 16, 16)
+            lay.setSpacing(8)
 
-        dashboard_layout.addWidget(self.tarjeta1, 0, 0)
-        dashboard_layout.addWidget(self.tarjeta2, 0, 1)
-        dashboard_layout.addWidget(self.tarjeta3, 1, 0)
-        dashboard_layout.addWidget(self.tarjeta4, 1, 1)
+            lbl = QLabel(title)
+            lbl.setProperty("role", "cardtitle")
+            lbl.setStyleSheet("font-size:14px; font-weight:700; color:#0d1b2a;")
+            lay.addWidget(lbl)
+
+            chart_area = QWidget()
+            chart_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            lay.addWidget(chart_area)
+            return frame, chart_area
+
+        # 6 tarjetas (2 filas x 3 col)
+        self.card_vc, self.chart_vc = make_card("Ventas vs Compras (mensual)")
+        self.card_gm, self.chart_gm = make_card("Gastos mensuales")
+        self.card_pvg, self.chart_pvg = make_card("Presupuesto vs Gasto por obra")
+        self.card_dgt, self.chart_dgt = make_card("Distribución de gastos por tipo")
+        self.card_sc, self.chart_sc   = make_card("Stock crítico")
+        self.card_tm, self.chart_tm   = make_card("Materiales más usados (últimos 30 días)")
+
+        dashboard_layout.addWidget(self.card_vc, 0, 0)
+        dashboard_layout.addWidget(self.card_gm, 0, 1)
+        dashboard_layout.addWidget(self.card_pvg, 0, 2)
+        dashboard_layout.addWidget(self.card_dgt, 1, 0)
+        dashboard_layout.addWidget(self.card_sc,  1, 1)
+        dashboard_layout.addWidget(self.card_tm,  1, 2)
+
+        # Renderizamos los gráficos ahora
+        self._render_inicio_charts()
+
 
         self.stackedWidget.addWidget(self.paginaPrincipal)
         self.gridLayout_2.addWidget(self.stackedWidget, 1, 1, 1, 1)
@@ -277,6 +316,9 @@ class Ui_MainWindow(object):
         self.menu_buttons["Inicio"].setChecked(True)
         self.stackedWidget.setCurrentWidget(self.paginaPrincipal)
         self._sidebar_collapsed = False  # expandido al inicio
+
+        # [Graficos] --- primera carga de datos ---
+        self._render_inicio_charts()
 
         QCoreApplication.translate("MainWindow", None)
 
@@ -327,7 +369,9 @@ class Ui_MainWindow(object):
         # Inicio → dashboard
         if nombre_modulo == "Inicio":
             self.stackedWidget.setCurrentWidget(self.paginaPrincipal)
-            # Si está colapsado, el botón de toggle queda arriba del listado (ya lo está)
+            # [Graficos] refresco rápido al volver a Inicio (no altera lógica)
+            if hasattr(self, "graficos"):
+                self.graficos.refresh_all()
             return
 
         # Evitar recarga si ya está
@@ -351,6 +395,59 @@ class Ui_MainWindow(object):
             setattr(self, f"pagina_{nombre_modulo}", pagina)
 
         self.stackedWidget.setCurrentWidget(getattr(self, f"pagina_{nombre_modulo}"))
+        # ---------- Helpers de gráficos (Inicio) ----------
+    def _embed_figure(self, container: QWidget, fig):
+        """Inserta un matplotlib Figure en un QWidget (con estilo Rodler)."""
+        # Limpia el container
+        for i in range(container.layout().count() if container.layout() else 0):
+            item = container.layout().itemAt(i)
+            w = item.widget()
+            if w:
+                w.setParent(None)
+        # Asegura layout
+        if not container.layout():
+            lay = QVBoxLayout(container)
+            lay.setContentsMargins(0, 0, 0, 0)
+            lay.setSpacing(0)
+        canvas = FigureCanvas(fig)
+        canvas.setParent(container)
+        container.layout().addWidget(canvas)
+
+    def _render_inicio_charts(self):
+        """Genera y embebe las 6 figuras del dashboard Inicio."""
+        try:
+            # 1) Ventas vs Compras (mensual, últimos 12 meses)
+            fig_vc  = create_ventas_vs_compras_mensuales()
+            self._embed_figure(self.chart_vc, fig_vc)
+
+            # 2) Gastos mensuales (últimos 12 meses)
+            fig_gm  = create_gastos_mensuales()
+            self._embed_figure(self.chart_gm, fig_gm)
+
+            # 3) Presupuesto vs Gasto por obra (top 10)
+            fig_pvg = create_presupuesto_vs_gasto_por_obra(top_n=10)
+            self._embed_figure(self.chart_pvg, fig_pvg)
+
+            # 4) Distribución de gastos por tipo (donut)
+            fig_dgt = create_distribucion_gastos_por_tipo()
+            self._embed_figure(self.chart_dgt, fig_dgt)
+
+            # 5) Stock crítico (déficit vs mínimo)
+            fig_sc  = create_stock_critico(limit=10)
+            self._embed_figure(self.chart_sc, fig_sc)
+
+            # 6) Materiales más usados (últimos 30 días)
+            fig_tm  = create_top_materiales_mes(dias=30, limit=10)
+            self._embed_figure(self.chart_tm, fig_tm)
+
+        except Exception as e:
+            # Si algo falla, mostramos un mensaje sencillo en las cards (sin romper la UI)
+            fallback = f"<b>Error al cargar gráficos:</b><br>{str(e)}"
+            for area in (self.chart_vc, self.chart_gm, self.chart_pvg, self.chart_dgt, self.chart_sc, self.chart_tm):
+                if not area.layout():
+                    lay = QVBoxLayout(area); lay.setContentsMargins(0,0,0,0)
+                lbl = QLabel(fallback); lbl.setWordWrap(True)
+                area.layout().addWidget(lbl)
 
 
 if __name__ == "__main__":

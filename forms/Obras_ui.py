@@ -4,7 +4,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from PySide6.QtCore import Qt, QPropertyAnimation, QTimer, QDate
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QScrollArea,
-    QGridLayout, QFrame, QPushButton, QMessageBox, QSizePolicy, QFileDialog
+    QGridLayout, QFrame, QPushButton, QMessageBox, QSizePolicy, QFileDialog,
+    QStackedLayout, QSpacerItem
 )
 from db.conexion import conexion
 from forms.formulario_nueva_obra import FormularioNuevaObra
@@ -33,38 +34,72 @@ class ObrasWidget(QWidget):
         self.animacion_actual = None
         self.id_obra_en_edicion = None
         self.cards = []  # [(frame, data_dict, es_nueva_obra)]
-        self.layout_principal = QVBoxLayout(self)
-        self.layout_principal.setContentsMargins(12, 12, 12, 12)
-        self.layout_principal.setSpacing(12)
 
-        # === Encabezado ===
-        self.encabezado = QWidget()
-        encabezado_layout = QHBoxLayout(self.encabezado)
-        encabezado_layout.setContentsMargins(0, 0, 0, 0)
-        encabezado_layout.setSpacing(10)
+        # ===== ROOT =====
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)      # sin gap arriba/abajo
+        root.setSpacing(0)
+
+        # ===== HEADER (fijo, pegado arriba) =====
+        self.header = QFrame()
+        self.header.setObjectName("obrasHeader")
+        self.header.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.header.setFixedHeight(64)
+
+        header_l = QHBoxLayout(self.header)
+        header_l.setContentsMargins(16, 10, 16, 10)
+        header_l.setSpacing(10)
 
         self.label_titulo = QLabel("Obras")
-        mark_title(self.label_titulo)
+        try:
+            mark_title(self.label_titulo)
+        except Exception:
+            # fallback por si mark_title deja un “cuadrado”
+            self.label_titulo.setStyleSheet("font-size: 18pt; font-weight: 700; color: #0d1b2a;")
+        if not (self.label_titulo.text() or "").strip():
+            self.label_titulo.setText("Obras")
 
         self.buscador = QLineEdit()
         self.buscador.setPlaceholderText("Buscar obra…")
         self.buscador.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        style_search(self.buscador)
-        self.buscador.textChanged.connect(self._filtrar_cards)
+        self.buscador.setFixedHeight(36)
+        try:
+            style_search(self.buscador)
+        except Exception:
+            self.buscador.setStyleSheet("padding:8px 12px; border-radius:10px; border:1px solid #dfe7f5;")
 
         self.btn_exportar = QPushButton("Exportar")
         self.btn_exportar.setCursor(Qt.PointingHandCursor)
+        self.btn_exportar.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.btn_exportar.setFixedHeight(36)
         make_primary(self.btn_exportar)
         self.btn_exportar.clicked.connect(self._exportar_excel_click)
 
-        encabezado_layout.addWidget(self.label_titulo)
-        encabezado_layout.addStretch()
-        encabezado_layout.addWidget(self.buscador, 1)
-        encabezado_layout.addWidget(self.btn_exportar, 0, Qt.AlignRight)
-        self.layout_principal.addWidget(self.encabezado)
+        header_l.addWidget(self.label_titulo)
+        header_l.addItem(QSpacerItem(10, 10, QSizePolicy.Expanding, QSizePolicy.Minimum))
+        header_l.addWidget(self.buscador, 1)
+        header_l.addWidget(self.btn_exportar, 0, Qt.AlignRight)
 
-        # === Listado (grid con scroll) ===
+        root.addWidget(self.header, 0)  # stretch 0 => nunca se estira
+
+        # ===== CENTRO: STACK con 3 páginas (ocupa todo el resto) =====
+        self.center = QFrame()
+        self.center.setObjectName("obrasCenter")
+        self.center.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        root.addWidget(self.center, 1)  # stretch 1 => ocupa todo
+
+        self.stack = QStackedLayout(self.center)
+        self.stack.setContentsMargins(12, 12, 12, 12)
+        self.stack.setSpacing(12)
+
+        # --- Página 0: LISTADO (grid con scroll) ---
+        self.page_listado = QFrame()
+        page_list_l = QVBoxLayout(self.page_listado)
+        page_list_l.setContentsMargins(0, 0, 0, 0)
+        page_list_l.setSpacing(0)
+
         self.scroll_area = QScrollArea()
+        self.scroll_area.setObjectName("obrasScroll")
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.scroll_widget = QWidget()
@@ -73,41 +108,69 @@ class ObrasWidget(QWidget):
         self.grid_layout.setHorizontalSpacing(12)
         self.grid_layout.setVerticalSpacing(12)
         self.scroll_area.setWidget(self.scroll_widget)
-        self.layout_principal.addWidget(self.scroll_area, 1)
+        page_list_l.addWidget(self.scroll_area, 1)
 
-        # === Contenedor de detalles inline (oculto por defecto) ===
+        self.stack.addWidget(self.page_listado)  # index 0
+
+        # --- Página 1: DETALLES inline (siempre full) ---
+        self.page_detalles = QFrame()
+        detalles_l = QVBoxLayout(self.page_detalles)
+        detalles_l.setContentsMargins(0, 0, 0, 0)
+        detalles_l.setSpacing(8)
+
+        # barra volver dentro de la página detalles
+        self.detalles_bar = QHBoxLayout()
+        self.detalles_bar.setContentsMargins(0, 0, 0, 0)
+        self.detalles_bar.setSpacing(8)
+        self.btn_volver = QPushButton("←")
+        self.btn_volver.setFixedWidth(40)
+        self.btn_volver.setFixedHeight(36)
+        self.btn_volver.setCursor(Qt.PointingHandCursor)
+        make_primary(self.btn_volver)
+        self.btn_volver.clicked.connect(self._cerrar_detalles_inline)
+        self.detalles_bar.addWidget(self.btn_volver, 0, Qt.AlignLeft)
+        self.detalles_bar.addStretch()
+        detalles_l.addLayout(self.detalles_bar)
+
+        # contenedor real para el widget de detalles
         self.detalles_container = QFrame()
-        self.detalles_container.setVisible(False)
-        self.detalles_container.setMaximumHeight(0)
-        self.detalles_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.detalles_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.detalles_layout = QVBoxLayout(self.detalles_container)
         self.detalles_layout.setContentsMargins(0, 0, 0, 0)
-        self.detalles_layout.setSpacing(8)
-        self.layout_principal.addWidget(self.detalles_container, 0)
+        self.detalles_layout.setSpacing(0)
+        detalles_l.addWidget(self.detalles_container, 1)
 
-        # === Formulario nueva/editar obra (oculto por defecto) ===
+        self.stack.addWidget(self.page_detalles)  # index 1
+
+        # --- Página 2: FORM nueva/editar obra (full) ---
+        self.page_form = QFrame()
+        page_form_l = QVBoxLayout(self.page_form)
+        page_form_l.setContentsMargins(0, 0, 0, 0)
+        page_form_l.setSpacing(0)
+
         self.formulario_nueva_obra = FormularioNuevaObra(self)
-        self.formulario_nueva_obra.setMaximumHeight(0)
-        self.formulario_nueva_obra.setVisible(False)
-        self.formulario_nueva_obra.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        self.layout_principal.addWidget(self.formulario_nueva_obra, 0)
+        self.formulario_nueva_obra.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.formulario_nueva_obra.setVisible(True)  # en esta página, siempre visible
+        page_form_l.addWidget(self.formulario_nueva_obra, 1)
 
+        self.stack.addWidget(self.page_form)  # index 2
+
+        # === conexiones ===
         self.formulario_nueva_obra.btn_cancelar.clicked.connect(self.ocultar_formulario_con_animacion)
         self.formulario_nueva_obra.btn_aceptar.clicked.connect(self.procesar_formulario_obra)
+        self.buscador.textChanged.connect(self._filtrar_cards)
 
-        # estilos globales + locales
+        # estilos
         apply_global_styles(self)
         self.setStyleSheet(self.estilos())
 
+        # data
         QTimer.singleShot(0, self._reflow)
         self.cargar_obras()
 
     # ===================== EXPORTACIÓN =====================
-
     def _exportar_excel_click(self):
-        ruta, _ = QFileDialog.getSaveFileName(
-            self, "Guardar como", "Obras.xlsx", "Excel (*.xlsx)"
-        )
+        ruta, _ = QFileDialog.getSaveFileName(self, "Guardar como", "Obras.xlsx", "Excel (*.xlsx)")
         if not ruta:
             return
         try:
@@ -117,9 +180,8 @@ class ObrasWidget(QWidget):
             QMessageBox.critical(self, "Error al exportar", f"No se pudo exportar todas las obras:\n{e}")
 
     # ===================== Helpers ids actuales =====================
-
     def _id_obra_desde_detalles(self):
-        if not self.detalles_container.isVisible():
+        if self.stack.currentIndex() != 1:
             return None
         for i in range(self.detalles_layout.count()):
             item = self.detalles_layout.itemAt(i)
@@ -139,20 +201,17 @@ class ObrasWidget(QWidget):
             return visibles[0].get("id_obra")
         return None
 
-    # ===================== CRUD OBRAS =====================
-
+    # ===================== CRUD OBRAS (lógica intacta) =====================
     def procesar_formulario_obra(self):
         datos = self.formulario_nueva_obra.obtener_datos()
         if not datos:
             QMessageBox.warning(self, "Datos inválidos", "Por favor completá todos los campos obligatorios.")
             return
-
         try:
             if self.id_obra_en_edicion is not None:
                 self.actualizar_obra_en_bd(self.id_obra_en_edicion, datos)
             else:
                 self.insertar_obra_en_bd(datos)
-
             self.formulario_nueva_obra.limpiar_campos()
             self.ocultar_formulario_con_animacion()
             self.refrescar_cards()
@@ -262,8 +321,7 @@ class ObrasWidget(QWidget):
         self._reflow()
         self._filtrar_cards()
 
-    # ===================== Consumos de obra (helpers para DetallesObraWidget) =====================
-
+    # ===================== Helpers de Detalles =====================
     def registrar_consumo(self, id_obra: int, id_producto: int, cantidad: float, nota: str = None):
         with conexion() as c:
             with c.cursor() as cur:
@@ -291,63 +349,30 @@ class ObrasWidget(QWidget):
             c.commit()
 
     # ===================== Navegación / Vistas =====================
-
     def _mostrar_detalles_inline(self, widget):
-        # limpiar contenido previo
+        # limpiar contenedor detalles
         for i in reversed(range(self.detalles_layout.count())):
             item = self.detalles_layout.takeAt(i)
             w = item.widget()
             if w:
                 w.deleteLater()
 
-        # barra de volver
-        barra = QHBoxLayout()
-        barra.setContentsMargins(0, 0, 8, 8)
-        btn_volver = QPushButton("←")
-        btn_volver.setFixedWidth(40)
-        btn_volver.setCursor(Qt.PointingHandCursor)
-        make_primary(btn_volver)
-        btn_volver.clicked.connect(self._cerrar_detalles_inline)
-        barra.addWidget(btn_volver, 0, Qt.AlignLeft)
-        self.detalles_layout.addLayout(barra)
-
-        # el widget de detalles debe poder expandir
+        # agregar el widget (full)
         widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.detalles_layout.addWidget(widget)
+        self.detalles_layout.addWidget(widget, 1)
 
-        self.scroll_area.setVisible(False)
-        self.detalles_container.setVisible(True)
-
-        # animación controlada por alto disponible
-        target = max(200, int(self.height() * 0.65))
-        anim = QPropertyAnimation(self.detalles_container, b"maximumHeight")
-        anim.setDuration(300)
-        anim.setStartValue(0)
-        anim.setEndValue(target)
-        anim.start()
-        self.animacion_actual = anim
+        # mostrar página detalles (full alto disponible)
+        self.stack.setCurrentIndex(1)
 
     def _cerrar_detalles_inline(self):
-        anim = QPropertyAnimation(self.detalles_container, b"maximumHeight")
-        anim.setDuration(300)
-        anim.setStartValue(self.detalles_container.height())
-        anim.setEndValue(0)
-
-        def _after():
-            self.detalles_container.setVisible(False)
-            self.scroll_area.setVisible(True)
-            self._filtrar_cards()
-
-        anim.finished.connect(_after)
-        anim.start()
-        self.animacion_actual = anim
+        self.stack.setCurrentIndex(0)
+        self._filtrar_cards()
 
     def abrir_detalles_obra(self, id_obra):
         detalle = DetallesObraWidget(id_obra, parent=self)
         self._mostrar_detalles_inline(detalle)
 
     # ===================== UI Cards =====================
-
     def _estilizar_card(self, frame):
         frame.setMinimumHeight(180)
         frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -464,43 +489,19 @@ class ObrasWidget(QWidget):
         self.grid_layout.addWidget(frame)
         self._reflow()
 
-    # ===================== Animaciones formulario =====================
-
+    # ===================== Vistas (mantengo nombres) =====================
     def mostrar_formulario_con_animacion(self):
-        if self.detalles_container.isVisible():
-            self._cerrar_detalles_inline()
-
-        form = self.formulario_nueva_obra
-        form.setVisible(True)
-        target = max(220, int(self.height() * 0.6))
-        anim = QPropertyAnimation(form, b'maximumHeight')
-        anim.setDuration(300)
-        anim.setStartValue(0)
-        anim.setEndValue(target)
-        anim.start()
-        self.animacion_actual = anim
+        # Sin animación de altura: página dedicada full-height
+        self.stack.setCurrentIndex(2)
 
     def ocultar_formulario_con_animacion(self):
-        form = self.formulario_nueva_obra
-        anim = QPropertyAnimation(form, b'maximumHeight')
-        anim.setDuration(300)
-        anim.setStartValue(form.height())
-        anim.setEndValue(0)
-        anim.finished.connect(lambda: form.setVisible(False))
-        anim.start()
-        self.animacion_actual = anim
+        self.stack.setCurrentIndex(0)
         self.id_obra_en_edicion = None
 
     # ===================== Layout / Flow =====================
-
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._reflow()
-        # ajustar alturas visibles para evitar cortes
-        if self.detalles_container.isVisible():
-            self.detalles_container.setMaximumHeight(max(220, int(self.height() * 0.65)))
-        if self.formulario_nueva_obra.isVisible():
-            self.formulario_nueva_obra.setMaximumHeight(max(220, int(self.height() * 0.6)))
 
     def _reflow(self):
         grid = self.grid_layout
@@ -510,7 +511,7 @@ class ObrasWidget(QWidget):
         viewport_w = self.scroll_area.viewport().width()
         hspacing = grid.horizontalSpacing() or 12
         vspacing = grid.verticalSpacing() or 12
-        min_card_w = 300  # un poco más ancho para evitar cortes
+        min_card_w = 300
 
         columnas = max(1, (viewport_w + hspacing) // (min_card_w + hspacing))
         col_w_total = viewport_w - (columnas - 1) * hspacing
@@ -561,8 +562,7 @@ class ObrasWidget(QWidget):
             if w not in frames_en_orden:
                 grid.addWidget(w)
 
-    # ===================== Filtro =====================
-
+    # ===================== Filtro (igual) =====================
     def _filtrar_cards(self):
         texto = self.buscador.text().strip().lower()
 
@@ -605,13 +605,15 @@ class ObrasWidget(QWidget):
         self._reflow()
 
     # ===================== Estilos =====================
-
     def estilos(self):
         return """
-        QWidget {
-            background-color: #f7f9fc;
+        QWidget { background-color: #f7f9fc; }
+        /* Header pegado arriba, prolijo */
+        #obrasHeader {
+            background: #ffffff;
+            border-bottom: 1px solid #e7eef8;
         }
-        QScrollArea { border: none; }
+        #obrasScroll { border: none; }
         QFrame {
             background-color: #ffffff;
             border-radius: 12px;
@@ -632,7 +634,6 @@ class ObrasWidget(QWidget):
             padding: 8px 12px;
         }
         """
-
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
