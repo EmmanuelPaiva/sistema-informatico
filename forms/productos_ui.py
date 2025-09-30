@@ -1,9 +1,14 @@
+# productos_willow.py
+
 import sys
 import os
-from decimal import Decimal
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from PySide6.QtCore import Qt, QCoreApplication, QMetaObject, QObject, QEvent
+from pathlib import Path
+import platform
+
+from PySide6.QtCore import Qt, QSize, QCoreApplication, QMetaObject, QObject, QEvent
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication, QFrame, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget, QHeaderView,
@@ -12,25 +17,133 @@ from PySide6.QtWidgets import (
 
 from forms.agregarProductos import Ui_Form as AgregarProductoForm
 from db.conexion import conexion
-try:
-    import psycopg2
-    from psycopg2 import errors as pg_errors
-except Exception:
-    psycopg2 = None
-    pg_errors = None
-
 from reports.excel import export_qtable_to_excel
 
-# === Estilos y helpers Rodler (paleta clara) ===
+# === Helpers existentes ===
 from forms.ui_helpers import (
     apply_global_styles, mark_title, make_primary, make_danger, style_table, style_search
 )
 
-OPCIONES_MIN_WIDTH = 140  # ancho mínimo para Editar/Eliminar
+OPCIONES_MIN_WIDTH = 140  # ancho mínimo para columna Opciones
+
+
+# =================== Helper de íconos (Tabler) ===================
+def _detect_desktop() -> Path:
+    home = Path.home()
+    if platform.system().lower().startswith("win"):
+        for env in ("ONEDRIVE", "OneDrive", "OneDriveConsumer"):
+            od = os.environ.get(env)
+            if od:
+                d = Path(od) / "Desktop"
+                if d.exists():
+                    return d
+        d = Path(os.environ.get("USERPROFILE", str(home))) / "Desktop"
+        return d if d.exists() else home
+    d = home / "Desktop"
+    return d if d.exists() else home
+
+
+def _icon_dirs() -> list[Path]:
+    desktop = _detect_desktop()
+    project_dir = Path(__file__).resolve().parent.parent
+    return [
+        desktop / "sistema-informatico" / "rodlerIcons",
+        desktop / "rodlerIcons",
+        project_dir / "rodlerIcons",
+    ]
+
+
+def _find_icon_path(name: str) -> Path | None:
+    for base in _icon_dirs():
+        p = base / f"{name}.svg"
+        if p.exists():
+            return p
+    return None
+
+
+def icon(name: str) -> QIcon:
+    p = _find_icon_path(name)
+    return QIcon(str(p)) if p else QIcon()
+
+
+# =================== ESTILOS (Willow base) ===================
+QSS_RODLER = """
+/* Base y tipografía */
+* { font-family: "Segoe UI", Arial, sans-serif; color:#0F172A; font-size:13px; }
+QWidget { background:#F5F7FB; }
+QLabel { background: transparent; }
+
+/* Cards suaves */
+#card, QTableWidget {
+  background:#FFFFFF;
+  border:1px solid #E8EEF6;
+  border-radius:16px;
+}
+
+/* Barra superior */
+#headerCard {
+  background:#FFFFFF;
+  border:1px solid #E8EEF6;
+  border-radius:16px;
+}
+
+/* Título */
+QLabel[role="pageTitle"] { font-size:18px; font-weight:800; color:#0F172A; }
+
+/* Buscador */
+QLineEdit#searchBox {
+  background:#F1F5F9;
+  border:1px solid #E8EEF6;
+  border-radius:10px;
+  padding:8px 12px;
+}
+QLineEdit#searchBox:focus { border-color:#90CAF9; }
+
+/* Inputs del formulario */
+QLineEdit, QComboBox {
+  background:#F1F5F9;
+  border:1px solid #E8EEF6;
+  border-radius:10px;
+  padding:6px 10px;
+  min-height:28px;
+}
+QLineEdit:focus, QComboBox:focus {
+  border:1px solid #90CAF9;
+  background:#FFFFFF;
+}
+
+/* Botones "grandes" fuera de la tabla */
+QPushButton[type="primary"] {
+  background:#2979FF;
+  border:1px solid #2979FF;
+  color:#FFFFFF;
+  border-radius:10px;
+  padding:8px 12px;
+  qproperty-iconSize: 18px 18px;
+}
+QPushButton[type="primary"]:hover { background:#3b86ff; }
+
+/* Tabla */
+QTableWidget {
+  gridline-color:#E8EEF6;
+  selection-background-color: rgba(41,121,255,.15);
+  selection-color:#0F172A;
+}
+QHeaderView::section {
+  background:#F8FAFF;
+  color:#0F172A;
+  padding:10px;
+  border:none;
+  border-right:1px solid #E8EEF6;
+}
+QTableWidget::item { padding:6px; }
+
+/* Asegurar que contenedores en celdas no pinten gris */
+QTableWidget QWidget { background: transparent; border: none; }
+"""
 
 
 class _ResizeWatcher(QObject):
-    """Observa resizeEvent del QTableWidget para reajustar columnas."""
     def __init__(self, owner):
         super().__init__()
         self.owner = owner
@@ -38,6 +151,34 @@ class _ResizeWatcher(QObject):
         if event.type() == QEvent.Resize:
             self.owner.ajustar_columnas()
         return False
+
+
+# ===== helper: estilo local (sobrescribe cualquier QSS global) =====
+def _style_action_button(btn: QPushButton, kind: str):
+    """
+    kind: 'edit' | 'delete'
+    Fuerza colores con stylesheet local para evitar que algún QSS global deje el botón transparente.
+    También los deja solo-ícono.
+    """
+    if kind == "edit":
+        btn.setStyleSheet(
+            "QPushButton{background:#2979FF;border:1px solid #2979FF;color:#FFFFFF;border-radius:8px;padding:6px;}"
+            "QPushButton:hover{background:#3b86ff;}"
+        )
+        btn.setIcon(icon("edit"))
+        btn.setToolTip("Editar producto")
+    else:  # delete
+        btn.setStyleSheet(
+            "QPushButton{background:#EF5350;border:1px solid #EF5350;color:#FFFFFF;border-radius:8px;padding:6px;}"
+            "QPushButton:hover{background:#f26461;}"
+        )
+        btn.setIcon(icon("trash"))
+        btn.setToolTip("Eliminar producto")
+
+    btn.setText("")  # icon-only
+    btn.setCursor(Qt.PointingHandCursor)
+    btn.setMinimumHeight(28)
+    btn.setIconSize(QSize(18, 18))
 
 
 class Ui_Form(object):
@@ -52,50 +193,59 @@ class Ui_Form(object):
 
         # ===== Encabezado =====
         self.headerFrame = QFrame(Form)
+        self.headerFrame.setObjectName("headerCard")
         self.headerFrame.setFrameShape(QFrame.Shape.NoFrame)
         self.headerLayout = QHBoxLayout(self.headerFrame)
-        self.headerLayout.setContentsMargins(0, 0, 0, 0)
+        self.headerLayout.setContentsMargins(16, 12, 16, 12)
         self.headerLayout.setSpacing(10)
 
         self.label = QLabel(self.headerFrame)
         self.label.setText("Productos")
+        self.label.setProperty("role", "pageTitle")
         mark_title(self.label)
-
         self.headerLayout.addWidget(self.label)
         self.headerLayout.addStretch(1)
 
         # Buscador
         self.searchBox = QLineEdit(self.headerFrame)
+        self.searchBox.setObjectName("searchBox")
         self.searchBox.setPlaceholderText("Buscar por nombre o proveedor…")
         self.searchBox.setClearButtonEnabled(True)
         self.searchBox.setMinimumWidth(260)
         self.searchBox.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         style_search(self.searchBox)
+        self.searchBox.addAction(icon("search"), QLineEdit.LeadingPosition)
         self.searchBox.textChanged.connect(self.filtrar_tabla)
         self.headerLayout.addWidget(self.searchBox)
 
+        # Exportar
         self.btnExportExcel = QPushButton(self.headerFrame)
         self.btnExportExcel.setMinimumSize(100, 34)
         self.btnExportExcel.setMaximumWidth(200)
         self.btnExportExcel.setText("Exportar Excel")
         self.btnExportExcel.setToolTip("Exporta la tabla visible a Excel (.xlsx)")
+        self.btnExportExcel.setProperty("type", "primary")
+        self.btnExportExcel.setIcon(icon("file-spreadsheet"))
         make_primary(self.btnExportExcel)
         self.btnExportExcel.clicked.connect(self.exportar_excel)
 
+        # Agregar
         self.pushButton = QPushButton(self.headerFrame)
         self.pushButton.setMinimumSize(120, 34)
         self.pushButton.setMaximumWidth(220)
         self.pushButton.setText("Agregar producto")
-        self.pushButton.setCursor(Qt.PointingHandCursor)
+        self.pushButton.setProperty("type", "primary")
+        self.pushButton.setIcon(icon("plus"))
         make_primary(self.pushButton)
         self.pushButton.clicked.connect(self.mostrar_formulario)
 
         self.headerLayout.addWidget(self.btnExportExcel)
-        self.headerLayout.addWidget(self.pushButton)
+        a = self.headerLayout.addWidget(self.pushButton)
         self.rootLayout.addWidget(self.headerFrame)
 
         # ===== Tabla =====
         self.tableWidget = QTableWidget(Form)
+        self.tableWidget.setObjectName("card")
         self.tableWidget.setColumnCount(6)
         self.tableWidget.setHorizontalHeaderLabels(["ID", "Nombre", "Precio", "Stock", "Proveedor", "Opciones"])
         self.tableWidget.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -103,47 +253,39 @@ class Ui_Form(object):
         self.tableWidget.setAlternatingRowColors(False)
         self.tableWidget.verticalHeader().setVisible(False)
         self.tableWidget.verticalHeader().setDefaultSectionSize(44)
-        self.tableWidget.setColumnHidden(0, True)  # Oculta ID
 
         header = self.tableWidget.horizontalHeader()
         header.setHighlightSections(False)
         header.setStretchLastSection(False)
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.Stretch)
+        header.setSectionResizeMode(3, QHeaderView.Stretch)
+        header.setSectionResizeMode(4, QHeaderView.Stretch)
+        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)
 
-        # Modo de resize: 1..4 Stretch (mismo tamaño); 5 Opciones a contenido
-        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # ID (oculto)
-        header.setSectionResizeMode(1, QHeaderView.Stretch)           # Nombre
-        header.setSectionResizeMode(2, QHeaderView.Stretch)           # Precio
-        header.setSectionResizeMode(3, QHeaderView.Stretch)           # Stock
-        header.setSectionResizeMode(4, QHeaderView.Stretch)           # Proveedor
-        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # Opciones (pequeña)
-
-        style_table(self.tableWidget)  # aplica estilo de headers/bordes/selección
+        style_table(self.tableWidget)
         self.rootLayout.addWidget(self.tableWidget)
 
-        # Watcher para recalcular columnas cuando la tabla cambia de tamaño
+        # Watcher resize
         self._resizeWatcher = _ResizeWatcher(self)
         self.tableWidget.installEventFilter(self._resizeWatcher)
 
         # ===== Cargar datos =====
         self.cargar_todos_los_productos()
-        self.ajustar_columnas()  # asegura tamaños iniciales
+        self._post_refresh_table()
 
-        # ===== Estilos globales del módulo =====
+        # ===== Estilos globales + Willow =====
         apply_global_styles(Form)
+        Form.setStyleSheet(QSS_RODLER)
 
         self.retranslateUi(Form)
         QMetaObject.connectSlotsByName(Form)
 
-
     # ======= Exportar =======
     def exportar_excel(self):
         try:
-            ruta, _ = QFileDialog.getSaveFileName(
-                None,
-                "Guardar como",
-                "Productos.xlsx",
-                "Excel (*.xlsx)"
-            )
+            ruta, _ = QFileDialog.getSaveFileName(None, "Guardar como", "Productos.xlsx", "Excel (*.xlsx)")
             if not ruta:
                 return
             export_qtable_to_excel(self.tableWidget, ruta, title="Productos")
@@ -151,10 +293,8 @@ class Ui_Form(object):
         except Exception as e:
             QMessageBox.critical(None, "Error", f"No se pudo exportar:\n{e}")
 
-
     def retranslateUi(self, Form):
         Form.setWindowTitle(QCoreApplication.translate("Form", "Productos"))
-
 
     # ---------- ALTA ----------
     def mostrar_formulario(self):
@@ -164,16 +304,17 @@ class Ui_Form(object):
         self.widgetAgregarProducto = QWidget()
         self.uiAgregarProducto = AgregarProductoForm()
         self.uiAgregarProducto.setupUi(self.widgetAgregarProducto)
-        apply_global_styles(self.widgetAgregarProducto)  # hereda estilos del helper
+
+        # Forzar skin Willow sobre cualquier QSS del .ui
+        self._force_willow_styles(self.widgetAgregarProducto)
+
         self.rootLayout.insertWidget(1, self.widgetAgregarProducto)
 
-        # 👉 stock solo lectura en el formulario de ALTA
         if hasattr(self.uiAgregarProducto, "lineEditStock"):
             self.uiAgregarProducto.lineEditStock.setReadOnly(True)
             self.uiAgregarProducto.lineEditStock.setPlaceholderText("Solo lectura (ajustes desde Compras/Ventas/Obras/Ajustes)")
             self.uiAgregarProducto.lineEditStock.setText("0")
 
-        # cargar proveedores
         try:
             with conexion() as conexion_db:
                 with conexion_db.cursor() as cursor:
@@ -187,15 +328,15 @@ class Ui_Form(object):
         for id_proveedor, nombre in proveedores:
             self.uiAgregarProducto.comboBoxProveedore.addItem(nombre, id_proveedor)
 
-        # botones del form
         if hasattr(self.uiAgregarProducto, "pushButton"):
             self.uiAgregarProducto.pushButton.setText("Guardar")
+            self.uiAgregarProducto.pushButton.setProperty("type","primary")
+            self.uiAgregarProducto.pushButton.setIcon(icon("device-floppy"))
             make_primary(self.uiAgregarProducto.pushButton)
         if hasattr(self.uiAgregarProducto, "pushButton_2"):
             self.uiAgregarProducto.pushButton_2.setText("Cancelar")
         self.uiAgregarProducto.pushButton_2.clicked.connect(self.cancelar)
         self.uiAgregarProducto.pushButton.clicked.connect(self.aceptar)
-
 
     def cancelar(self):
         if hasattr(self, 'widgetAgregarProducto'):
@@ -206,7 +347,6 @@ class Ui_Form(object):
             self.rootLayout.removeWidget(self.widgetEditarProducto)
             self.widgetEditarProducto.deleteLater()
             del self.widgetEditarProducto
-
 
     def aceptar(self):
         nombre = self.uiAgregarProducto.lineEditNombre.text().strip()
@@ -223,7 +363,6 @@ class Ui_Form(object):
             QMessageBox.warning(None, "Validación", "Precio inválido.")
             return
 
-        # Crea con stock_actual = 0 (no se permite setear stock desde este módulo)
         try:
             with conexion() as c:
                 with c.cursor() as cur:
@@ -240,7 +379,6 @@ class Ui_Form(object):
             self.cargar_datos(id_producto)
         except Exception as e:
             QMessageBox.critical(None, "Error", f"No se pudo crear el producto:\n{e}")
-
 
     def cargar_datos(self, id_producto):
         try:
@@ -262,18 +400,14 @@ class Ui_Form(object):
         if producto:
             row_count = self.tableWidget.rowCount()
             self.tableWidget.insertRow(row_count)
-
-            # ID, Nombre, Precio, Stock, Proveedor
             for col, valor in enumerate(producto):
                 val_str = self._format_cell(col, valor)
                 item = QTableWidgetItem(val_str)
                 item.setTextAlignment(Qt.AlignCenter)
                 self.tableWidget.setItem(row_count, col, item)
-
             self._colocar_botones_opciones(row_count, producto[0])
-            self.ajustar_columnas()
+            self._post_refresh_table()
             self.cancelar()
-
 
     def cargar_todos_los_productos(self):
         try:
@@ -295,17 +429,13 @@ class Ui_Form(object):
         for producto in productos:
             row_count = self.tableWidget.rowCount()
             self.tableWidget.insertRow(row_count)
-
             for col, valor in enumerate(producto):
                 val_str = self._format_cell(col, valor)
                 item = QTableWidgetItem(val_str)
                 item.setTextAlignment(Qt.AlignCenter)
                 self.tableWidget.setItem(row_count, col, item)
-
             self._colocar_botones_opciones(row_count, producto[0])
-
-        self.ajustar_columnas()
-
+        self._post_refresh_table()
 
     def _colocar_botones_opciones(self, fila: int, id_producto: int):
         contenedor = QWidget()
@@ -314,33 +444,33 @@ class Ui_Form(object):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
 
-        boton_editar = QPushButton("Editar")
-        boton_eliminar = QPushButton("Eliminar")
+        # Asegurar contenedor transparente (sin gris)
+        contenedor.setAutoFillBackground(False)
+        contenedor.setAttribute(Qt.WA_StyledBackground, False)
+        contenedor.setAttribute(Qt.WA_NoSystemBackground, True)
+        contenedor.setStyleSheet("background: transparent; border: none;")
 
-        make_primary(boton_editar)
-        make_danger(boton_eliminar)
+        # Icon-only + color forzado
+        btn_edit = QPushButton("")
+        btn_del  = QPushButton("")
+        _style_action_button(btn_edit, "edit")
+        _style_action_button(btn_del, "delete")
 
-        boton_editar.setMinimumHeight(28)
-        boton_eliminar.setMinimumHeight(28)
+        btn_edit.clicked.connect(lambda _, pid=id_producto: self.mostrar_formulario_editar(pid))
+        btn_del.clicked.connect(lambda _, pid=id_producto: self.eliminar_producto(pid))
 
-        boton_editar.clicked.connect(lambda _, pid=id_producto: self.mostrar_formulario_editar(pid))
-        boton_eliminar.clicked.connect(lambda _, pid=id_producto: self.eliminar_producto(pid))
-
-        layout.addWidget(boton_editar)
-        layout.addWidget(boton_eliminar)
+        layout.addWidget(btn_edit)
+        layout.addWidget(btn_del)
         self.tableWidget.setCellWidget(fila, 5, contenedor)
 
-
     def _format_cell(self, col: int, valor):
-        """Formatea celdas para mejor legibilidad (precio con 2 decimales)."""
         if col == 2:  # Precio
             try:
                 v = float(valor)
-                return f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")  # formato 1.234,56
+                return f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
             except Exception:
                 return str(valor)
         return str(valor)
-
 
     def eliminar_producto(self, id_producto):
         confirm = QMessageBox.question(
@@ -354,7 +484,6 @@ class Ui_Form(object):
         try:
             with conexion() as c:
                 with c.cursor() as cur:
-                    # pre-chequeo amigable
                     cur.execute("SELECT EXISTS (SELECT 1 FROM movimientos_stock WHERE id_producto=%s LIMIT 1);", (id_producto,))
                     tiene_kardex = cur.fetchone()[0]
                     cur.execute("SELECT EXISTS (SELECT 1 FROM ventas_detalle WHERE id_producto=%s LIMIT 1);", (id_producto,))
@@ -377,15 +506,13 @@ class Ui_Form(object):
             QMessageBox.critical(None, "No se pudo eliminar", f"El producto {id_producto} no pudo eliminarse.\nDetalle: {e}")
             return
 
-        # quitar de la UI
         for fila in range(self.tableWidget.rowCount()):
             item = self.tableWidget.item(fila, 0)
             if item and int(item.text()) == id_producto:
                 self.tableWidget.removeRow(fila)
                 break
 
-        self.ajustar_columnas()
-
+        self._post_refresh_table()
 
     # ---------- EDICIÓN ----------
     def mostrar_formulario_editar(self, id_producto):
@@ -395,15 +522,16 @@ class Ui_Form(object):
         self.widgetEditarProducto = QWidget()
         self.uiEditarProducto = AgregarProductoForm()
         self.uiEditarProducto.setupUi(self.widgetEditarProducto)
-        apply_global_styles(self.widgetEditarProducto)
+
+        # Forzar skin Willow
+        self._force_willow_styles(self.widgetEditarProducto)
+
         self.rootLayout.insertWidget(1, self.widgetEditarProducto)
 
-        # 👉 stock solo lectura también en EDICIÓN
         if hasattr(self.uiEditarProducto, "lineEditStock"):
             self.uiEditarProducto.lineEditStock.setReadOnly(True)
             self.uiEditarProducto.lineEditStock.setPlaceholderText("Solo lectura (ajustes desde Compras/Ventas/Obras/Ajustes)")
 
-        # leer datos actuales
         try:
             with conexion() as c:
                 with c.cursor() as cur:
@@ -428,7 +556,6 @@ class Ui_Form(object):
         if hasattr(self.uiEditarProducto, 'lineEditDescripcion') and descripcion is not None:
             self.uiEditarProducto.lineEditDescripcion.setText(descripcion)
 
-        # proveedores
         try:
             with conexion() as c:
                 with c.cursor() as cur:
@@ -444,15 +571,15 @@ class Ui_Form(object):
             if idp == proveedor:
                 self.uiEditarProducto.comboBoxProveedore.setCurrentIndex(self.uiEditarProducto.comboBoxProveedore.count()-1)
 
-        # botones del form
         if hasattr(self.uiEditarProducto, "pushButton"):
             self.uiEditarProducto.pushButton.setText("Guardar cambios")
+            self.uiEditarProducto.pushButton.setProperty("type","primary")
+            self.uiEditarProducto.pushButton.setIcon(icon("device-floppy"))
             make_primary(self.uiEditarProducto.pushButton)
         if hasattr(self.uiEditarProducto, "pushButton_2"):
             self.uiEditarProducto.pushButton_2.setText("Cancelar")
         self.uiEditarProducto.pushButton_2.clicked.connect(self.cancelar)
         self.uiEditarProducto.pushButton.clicked.connect(lambda: self.editar_producto(id_producto))
-
 
     def editar_producto(self, id_producto):
         nombre = self.uiEditarProducto.lineEditNombre.text().strip()
@@ -466,7 +593,6 @@ class Ui_Form(object):
             QMessageBox.warning(None, "Validación", "Precio inválido.")
             return
 
-        # actualizar SOLO datos base (stock no se toca aquí)
         try:
             with conexion() as c:
                 with c.cursor() as cur:
@@ -483,7 +609,6 @@ class Ui_Form(object):
             QMessageBox.critical(None, "Error", f"No se pudo actualizar el producto:\n{e}")
             return
 
-        # refrescar fila
         self.tableWidget.setSortingEnabled(False)
         try:
             with conexion() as c:
@@ -513,13 +638,11 @@ class Ui_Form(object):
                     break
 
         self.tableWidget.setSortingEnabled(True)
-        self.ajustar_columnas()
+        self._post_refresh_table()
         self.cancelar()
-
 
     # ---------- BÚSQUEDA / COLUMNAS ----------
     def filtrar_tabla(self, texto: str):
-        """Filtra por Nombre (col 1) o Proveedor (col 4)."""
         query = (texto or "").strip().lower()
         for fila in range(self.tableWidget.rowCount()):
             nombre_item = self.tableWidget.item(fila, 1)
@@ -530,20 +653,42 @@ class Ui_Form(object):
             self.tableWidget.setRowHidden(fila, not visible)
 
     def ajustar_columnas(self):
-        """Asegura columnas iguales (1..4) y opciones más chica."""
         header = self.tableWidget.horizontalHeader()
-        # Igualar 1..4 como Stretch y que ocupen el espacio disponible
         header.setSectionResizeMode(1, QHeaderView.Stretch)
         header.setSectionResizeMode(2, QHeaderView.Stretch)
         header.setSectionResizeMode(3, QHeaderView.Stretch)
         header.setSectionResizeMode(4, QHeaderView.Stretch)
-
-        # Opciones a contenido con mínimo
         header.setSectionResizeMode(5, QHeaderView.ResizeToContents)
-        # Asegurar mínimo de opciones
         current_width = self.tableWidget.columnWidth(5)
         if current_width < OPCIONES_MIN_WIDTH:
             self.tableWidget.setColumnWidth(5, OPCIONES_MIN_WIDTH)
+
+    def _post_refresh_table(self):
+        """Asegura estado visual consistente tras cargar/editar/borrar."""
+        try:
+            self.tableWidget.setColumnHidden(0, True)  # ocultar ID SIEMPRE
+        except Exception:
+            pass
+        self.ajustar_columnas()
+
+    # ---------- Forzado de estilos Willow en formularios ----------
+    def _force_willow_styles(self, container: QWidget):
+        # limpiar estilos heredados
+        if container.styleSheet():
+            container.setStyleSheet("")
+        for child in container.findChildren(QWidget):
+            if child.styleSheet():
+                child.setStyleSheet("")
+
+        apply_global_styles(container)
+        container.setStyleSheet(QSS_RODLER)
+
+        for btn in container.findChildren(QPushButton):
+            txt = (btn.text() or "").lower()
+            if "guardar" in txt:
+                btn.setProperty("type", "primary")
+                make_primary(btn)
+            btn.setMinimumHeight(32)
 
 
 if __name__ == "__main__":
