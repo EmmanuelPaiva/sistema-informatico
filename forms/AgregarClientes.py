@@ -128,6 +128,8 @@ class Ui_Form(object):
         btnBar.addWidget(self.pushButtonCancelar)
 
         self.pushButtonAceptar = QPushButton("Guardar")
+        self.pushButtonAceptar.setObjectName("btnAceptarCliente")            # PATCH permisos
+        self.pushButtonAceptar.setProperty("perm_code", "clientes.create")
         self.pushButtonAceptar.setProperty("type", "primary")
         btnBar.addWidget(self.pushButtonAceptar)
 

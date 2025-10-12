@@ -136,6 +136,8 @@ class Ui_Form(object):
         if not Form.objectName():
             Form.setObjectName("Form")
         Form.resize(1000, 680)
+        # Keep a reference to the module form to allow permission re-apply
+        self._form_main = Form
 
         self.grid = QGridLayout(Form)
         self.grid.setContentsMargins(12,12,12,12)
@@ -169,6 +171,8 @@ class Ui_Form(object):
         h.addWidget(self.btnExport)
 
         self.btnNuevo = QPushButton("Nuevo proveedor", self.headerCard)
+        self.btnNuevo.setObjectName("btnProveedorNuevo")                 # PATCH permisos
+        self.btnNuevo.setProperty("perm_code", "proveedores.create")  
         self.btnNuevo.setProperty("type","primary")
         self.btnNuevo.setIcon(icon("plus"))
         self.btnNuevo.clicked.connect(lambda: self.abrir_formulario(Form))
@@ -238,6 +242,16 @@ class Ui_Form(object):
 
         # Aplicar estilo a botones Editar/Eliminar
         self._colorize_option_buttons()
+
+        # Reaplicar permisos del modulo si MenuPrincipal esta disponible
+        try:
+            form = getattr(self, '_form_main', None)
+            if form is not None:
+                menu_ref = getattr(form, 'menuPrincipalRef', None)
+                if menu_ref:
+                    menu_ref._apply_permissions_to_module_page("Proveedores", form)
+        except Exception:
+            pass
 
     def _colorize_option_buttons(self):
         rows = self.table.rowCount()

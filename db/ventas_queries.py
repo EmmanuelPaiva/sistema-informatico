@@ -416,7 +416,11 @@ def agregar_botones_opciones(treeWidget, item_venta, ui, Form):
     layout.setContentsMargins(0, 0, 0, 0)
 
     btn_editar = QPushButton("Editar")
+    btn_editar.setObjectName("btnVentaEditar")               # PATCH permisos
+    btn_editar.setProperty("perm_code", "ventas.update")
     btn_eliminar = QPushButton("Eliminar")
+    btn_eliminar.setObjectName("btnVentaEliminar")           # PATCH permisos
+    btn_eliminar.setProperty("perm_code", "ventas.delete")
     btn_editar.setFixedHeight(25)
     btn_eliminar.setFixedHeight(25)
 

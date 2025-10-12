@@ -3,7 +3,7 @@ import sys, os, platform
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from pathlib import Path
-from PySide6.QtCore import (QCoreApplication, QMetaObject, QRect, QSize, Qt, QPropertyAnimation, QObject, QEvent)
+from PySide6.QtCore import (QCoreApplication, QRect, QSize, Qt, QPropertyAnimation, QObject, QEvent, QTimer)
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication, QFrame, QGridLayout, QLabel, QPushButton, QVBoxLayout, QWidget,
@@ -26,8 +26,9 @@ from forms.ui_helpers import (
 
 # ---- Constantes UI
 ROW_HEIGHT = 48
-BTN_MIN_HEIGHT = 32   # alineado con Productos (alto ~32px)
+BTN_MIN_HEIGHT = 32   # alineado con Productos
 OPCIONES_COL = 6      # índice de "Opciones"
+
 
 # ---- Iconos (rodlerIcons en escritorio/OneDrive)
 def _desktop_dir() -> Path:
@@ -48,6 +49,7 @@ ICON_DIR = _desktop_dir() / "sistema-informatico" / "rodlerIcons"
 def icon(name: str) -> QIcon:
     p = ICON_DIR / f"{name}.svg"
     return QIcon(str(p)) if p.exists() else QIcon()
+
 
 # ---- QSS Willow (mismo que módulos anteriores)
 QSS_WILLOW = """
@@ -98,10 +100,10 @@ QPushButton[type="icon"]:hover {
   color:#0F172A;
 }
 
-/* Variantes coloreadass*/
+/* Variantes coloreadas (igual que Productos) */
 QPushButton[type="icon"][variant="edit"] {
-  background:#2979FF;
-  color:#FFFFFF;
+  background:#EAF2FF;
+  color:#1D4ED8;
 }
 QPushButton[type="icon"][variant="edit"]:hover {
   background:#DCEBFF;
@@ -132,7 +134,9 @@ QTreeWidget {
 }
 """
 
+
 class _ResizeWatcher(QObject):
+    """Ajusta columnas del QTreeWidget al redimensionar la tabla."""
     def __init__(self, owner):
         super().__init__()
         self.owner = owner
@@ -142,11 +146,27 @@ class _ResizeWatcher(QObject):
         return False
 
 
+class _ParentResizeWatcher(QObject):
+    """Mantiene pegado el panel deslizante a la derecha del Form al redimensionar."""
+    def __init__(self, ui):
+        super().__init__()
+        self.ui = ui
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Resize:
+            # Recalcular la geometría del panel si está visible
+            self.ui._sync_form_geometry()
+        return False
+
+
 class Ui_Form(object):
     def setupUi(self, Form):
         if not Form.objectName():
             Form.setObjectName("Form")
         Form.resize(1000, 660)
+
+        # Guardamos referencia al host para el watcher
+        self._host = Form
+        self._slide_width = 450  # ancho lógico del panel
 
         # ===== Layout raíz
         self.gridLayout = QGridLayout(Form)
@@ -182,6 +202,8 @@ class Ui_Form(object):
         hl.addWidget(self.pushButtonExportar)
 
         self.pushButtonNuevaCompra = QPushButton("Nueva compra", self.headerCard)
+        self.pushButtonNuevaCompra.setObjectName("btnCompraNueva")            # PATCH permisos
+        self.pushButtonNuevaCompra.setProperty("perm_code", "compras.create")
         self.pushButtonNuevaCompra.setProperty("type","primary")
         self.pushButtonNuevaCompra.setIcon(icon("plus"))
         make_primary(self.pushButtonNuevaCompra)
@@ -219,16 +241,19 @@ class Ui_Form(object):
         # Señales
         self.searchBox.textChanged.connect(self._filtrar)
 
-        # Watcher resize
+        # Watchers de resize
         self._resizeWatcher = _ResizeWatcher(self)
         self.treeWidget.installEventFilter(self._resizeWatcher)
+
+        self._parentWatcher = _ParentResizeWatcher(self)
+        Form.installEventFilter(self._parentWatcher)
 
         # Estilos globales + Willow
         apply_global_styles(Form)
         Form.setStyleSheet(QSS_WILLOW)
 
         self.retranslateUi(Form)
-        QMetaObject.connectSlotsByName(Form)
+        # QMetaObject.connectSlotsByName(Form)  # opcional
 
         # Cargar datos y post-estética
         setRowsTreeWidget(self, Form)
@@ -248,17 +273,29 @@ class Ui_Form(object):
         except Exception as e:
             QMessageBox.critical(None, "Error", f"No se pudo exportar:\n{e}")
 
+    # ===== Slide-out helpers
+    def _sync_form_geometry(self):
+        """Mantiene pegado el formulario al borde derecho del contenedor."""
+        if not hasattr(self, 'formulario_nueva_compra') or not self.formulario_nueva_compra.isVisible():
+            return
+        host_w = max(self._host.width(), 0)
+        host_h = max(self._host.height(), 0)
+        panel_w = min(self._slide_width, max(280, host_w))  # nunca más ancho que el host; mínimo 280
+        x = host_w - panel_w
+        self.formulario_nueva_compra.setGeometry(x, 0, panel_w, host_h)
+
     # ===== Slide-out cancelar
     def cancelar(self, Form):
-        if hasattr(self, 'formulario_nueva_compra'):
+        if hasattr(self, 'formulario_nueva_compra') and self.formulario_nueva_compra.isVisible():
             ancho_formulario = self.formulario_nueva_compra.width()
-            alto_formulario = Form.height()
+            alto_formulario  = Form.height()
             self.anim = QPropertyAnimation(self.formulario_nueva_compra, b"geometry")
             self.anim.setDuration(300)
             self.anim.setStartValue(QRect(Form.width() - ancho_formulario, 0, ancho_formulario, alto_formulario))
             self.anim.setEndValue(QRect(Form.width(), 0, ancho_formulario, alto_formulario))
+            # cerrar al terminar la animación
+            self.anim.finished.connect(self.formulario_nueva_compra.close)
             self.anim.start()
-            self.formulario_nueva_compra.close()
 
     # ===== Alta compra
     def abrir_formulario_nueva_compra(self, Form, edicion=False):
@@ -274,15 +311,24 @@ class Ui_Form(object):
 
         agrega_prodcuto_a_fila(self.ui_nueva_compra)
 
-        ancho_formulario = 450
-        alto_formulario = Form.height()
+        # Ancho/alto iniciales
+        ancho_formulario = min(self._slide_width, max(280, Form.width()))
+        alto_formulario  = Form.height()
+
+        # Posición inicial fuera de pantalla (derecha) para animar entrada
         self.formulario_nueva_compra.setGeometry(Form.width(), 0, ancho_formulario, alto_formulario)
         self.formulario_nueva_compra.show()
+
+        # Animación de entrada
         self.anim = QPropertyAnimation(self.formulario_nueva_compra, b"geometry")
         self.anim.setDuration(300)
         self.anim.setStartValue(QRect(Form.width(), 0, ancho_formulario, alto_formulario))
         self.anim.setEndValue(QRect(Form.width() - ancho_formulario, 0, ancho_formulario, alto_formulario))
         self.anim.start()
+
+        # Sincroniza la geometría en el próximo ciclo de eventos y al terminar la animación
+        QTimer.singleShot(0, self._sync_form_geometry)
+        self.anim.finished.connect(self._sync_form_geometry)
 
         if not edicion:
             try:
@@ -354,13 +400,13 @@ class Ui_Form(object):
                 lower = (btn.text() or "").lower()
                 if "edit" in lower or "editar" in lower:
                     btn.setProperty("type", "icon")
-                    btn.setProperty("variant", "edit")     # AZUL
+                    btn.setProperty("variant", "edit")     # AZUL SUAVE
                     btn.setIcon(icon("edit"))
                     btn.setText("")
                     btn.setToolTip("Editar compra")
                 elif "del" in lower or "elimin" in lower or "borrar" in lower:
                     btn.setProperty("type", "icon")
-                    btn.setProperty("variant", "delete")   # ROJO
+                    btn.setProperty("variant", "delete")   # ROJO SUAVE
                     btn.setIcon(icon("trash"))
                     btn.setText("")
                     btn.setToolTip("Eliminar compra")

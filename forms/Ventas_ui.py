@@ -5,13 +5,13 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from pathlib import Path
 from PySide6.QtCore import (
-    QCoreApplication, QMetaObject, QRect, Qt, QPropertyAnimation, QObject, QEvent, QSize
+    QCoreApplication, QMetaObject, QRect, Qt, QPropertyAnimation, QObject, QEvent, QSize, QTimer
 )
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication, QGridLayout, QHeaderView, QLabel, QLineEdit, QPushButton,
-    QTreeWidget, QWidget, QMainWindow, QFileDialog, QMessageBox,
-    QSizePolicy, QFrame, QHBoxLayout, QVBoxLayout
+    QTreeWidget, QWidget, QFileDialog, QMessageBox,
+    QSizePolicy, QFrame, QHBoxLayout, QVBoxLayout, QMainWindow
 )
 
 from forms.formularioVentas import Ui_Form as nuevaVentaUi
@@ -28,12 +28,13 @@ from forms.ui_helpers import (
     apply_global_styles, mark_title, make_primary, make_danger, style_search
 )
 
-# === Consistencia con Productos: mismos tamaños/colores ===
+# === Consistencia con tu módulo original ===
 OPCIONES_MIN_WIDTH = 140
 BTN_MIN_HEIGHT = 28
 ROW_HEIGHT = 46
 ICON_PX = 18
 OPCIONES_COL = 7
+SLIDE_WIDTH = 450  # ancho lógico del panel deslizante (igual que antes)
 
 # ---------------- Iconos (rodlerIcons en Escritorio/OneDrive) ----------------
 def _desktop_dir() -> Path:
@@ -56,7 +57,7 @@ def icon(name: str) -> QIcon:
     return QIcon(str(p)) if p.exists() else QIcon()
 
 
-# ---------------- QSS Willow (idéntico a Productos/Clientes) ----------------
+# ---------------- QSS Willow (como el tuyo) ----------------
 QSS_WILLOW = """
 * { font-family: "Segoe UI", Arial, sans-serif; color:#0F172A; font-size:13px; }
 QWidget { background:#F5F7FB; }
@@ -122,6 +123,17 @@ class _ResizeWatcher(QObject):
         return False
 
 
+class _ParentResizeWatcher(QObject):
+    """Mantiene pegado el panel deslizante a la derecha del Form al redimensionar."""
+    def __init__(self, ui):
+        super().__init__()
+        self.ui = ui
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Resize:
+            self.ui._sync_form_geometry()
+        return False
+
+
 def _style_action_button(btn: QPushButton, kind: str):
     """
     Aplica estilo sólido azul/rojo, icon-only, sin fondo gris del contenedor,
@@ -152,6 +164,9 @@ class Ui_Form(object):
         if not Form.objectName():
             Form.setObjectName("Form")
         Form.resize(1000, 620)
+
+        self._host = Form
+        self._slide_width = SLIDE_WIDTH
 
         self.gridLayout = QGridLayout(Form)
         self.gridLayout.setContentsMargins(12, 12, 12, 12)
@@ -186,9 +201,12 @@ class Ui_Form(object):
         hl.addWidget(self.btnExportar)
 
         self.btnNueva = QPushButton("Nueva venta", self.headerCard)
+        self.btnNueva.setObjectName("btnVentaNueva")        
         self.btnNueva.setProperty("type","primary")
+        self.btnNueva.setProperty("perm_code", "ventas.create")
         self.btnNueva.setIcon(icon("plus"))
         make_primary(self.btnNueva)
+        self.btnNueva.clicked.connect(lambda: self.abrir_formulario_nueva_venta(Form))
         hl.addWidget(self.btnNueva)
 
         self.gridLayout.addWidget(self.headerCard, 0, 0, 1, 1)
@@ -221,15 +239,16 @@ class Ui_Form(object):
         # Señales
         self.treeWidget.itemClicked.connect(lambda item, col: toggle_subtabla(item))
         self.lineEdit.textChanged.connect(self._buscar_y_postprocesar)
-        self.btnNueva.clicked.connect(lambda: self.abrir_formulario_nueva_venta(Form))
 
         # Datos iniciales
         cargar_ventas(self, Form)
         self._post_refresh()
 
-        # Watcher
+        # Watchers
         self._resizeWatcher = _ResizeWatcher(self)
         self.treeWidget.installEventFilter(self._resizeWatcher)
+        self._parentWatcher = _ParentResizeWatcher(self)
+        Form.installEventFilter(self._parentWatcher)
 
         # Estilos
         apply_global_styles(Form)
@@ -247,22 +266,35 @@ class Ui_Form(object):
             ruta, _ = QFileDialog.getSaveFileName(None, "Guardar como", "Ventas.xlsx", "Excel (*.xlsx)")
             if not ruta:
                 return
+            # Igual que tu versión original (usa la función de QTable por compatibilidad)
             export_qtable_to_excel(self.treeWidget, ruta, title="Ventas")
             QMessageBox.information(None, "Éxito", "Exportación completada.")
         except Exception as e:
             QMessageBox.critical(None, "Error", f"No se pudo exportar:\n{e}")
 
+    # ======= Helpers del slide-out =======
+    def _sync_form_geometry(self):
+        """Mantiene pegado el formulario al borde derecho del contenedor al redimensionar."""
+        if not hasattr(self, 'formulario_nueva_venta') or not self.formulario_nueva_venta.isVisible():
+            return
+        host_w = max(self._host.width(), 0)
+        host_h = max(self._host.height(), 0)
+        panel_w = min(SLIDE_WIDTH, max(280, host_w))
+        x = host_w - panel_w
+        self.formulario_nueva_venta.setGeometry(x, 0, panel_w, host_h)
+
     def cancelar(self, Form):
         if not hasattr(self, 'formulario_nueva_venta'):
             return
-        ancho_formulario = 300
-        alto_formulario = Form.height()
-        self.anim = QPropertyAnimation(self.formulario_nueva_venta, b"geometry")
-        self.anim.setDuration(300)
-        self.anim.setStartValue(QRect(Form.width() - ancho_formulario, 0, ancho_formulario, alto_formulario))
-        self.anim.setEndValue(QRect(Form.width(), 0, ancho_formulario, alto_formulario))
-        self.anim.start()
-        self.formulario_nueva_venta.close()
+        if self.formulario_nueva_venta.isVisible():
+            ancho_formulario = self.formulario_nueva_venta.width()
+            alto_formulario = Form.height()
+            self.anim = QPropertyAnimation(self.formulario_nueva_venta, b"geometry")
+            self.anim.setDuration(300)
+            self.anim.setStartValue(QRect(Form.width() - ancho_formulario, 0, ancho_formulario, alto_formulario))
+            self.anim.setEndValue(QRect(Form.width(), 0, ancho_formulario, alto_formulario))
+            self.anim.finished.connect(self.formulario_nueva_venta.close)
+            self.anim.start()
 
     # ----- Alta / edición -----
     def abrir_formulario_nueva_venta(self, Form, edicion=False):
@@ -274,8 +306,10 @@ class Ui_Form(object):
 
         agregar_filas(self.ui_nueva_venta)
 
-        ancho_formulario = 450
+        # Ancho/alto iniciales
+        ancho_formulario = min(SLIDE_WIDTH, max(280, Form.width()))
         alto_formulario = Form.height()
+        # Posición inicial fuera de pantalla (derecha) para animar entrada
         self.formulario_nueva_venta.setGeometry(Form.width(), 0, ancho_formulario, alto_formulario)
         self.formulario_nueva_venta.show()
 
@@ -284,6 +318,10 @@ class Ui_Form(object):
         self.anim.setStartValue(QRect(Form.width(), 0, ancho_formulario, alto_formulario))
         self.anim.setEndValue(QRect(Form.width() - ancho_formulario, 0, ancho_formulario, alto_formulario))
         self.anim.start()
+
+        # Sincroniza la geometría por si el usuario redimensiona durante/tras la animación
+        QTimer.singleShot(0, self._sync_form_geometry)
+        self.anim.finished.connect(self._sync_form_geometry)
 
         if not edicion:
             conexion_db = conexion()
@@ -337,7 +375,7 @@ class Ui_Form(object):
         for i in range(self.treeWidget.topLevelItemCount()):
             process_item(self.treeWidget.topLevelItem(i))
 
-    # Botones de Opciones: mismo color/tamaño que Productos (icon-only azul/rojo)
+    # Botones de Opciones: mismo color/tamaño (usa _style_action_button)
     def _colorize_option_buttons(self):
         def process_item(item):
             w = self.treeWidget.itemWidget(item, OPCIONES_COL)
@@ -371,13 +409,9 @@ class VentanaPrincipal(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if hasattr(self.ui, 'formulario_nueva_venta'):
-            ancho_formulario = self.ui.formulario_nueva_venta.width()
-            alto_formulario = self.height()
-            self.ui.formulario_nueva_venta.setGeometry(
-                self.width() - ancho_formulario, 0,
-                ancho_formulario, alto_formulario
-            )
+        # Mantener pegado en caso de usarse QMainWindow como contenedor
+        if hasattr(self.ui, 'formulario_nueva_venta') and self.ui.formulario_nueva_venta.isVisible():
+            self.ui._sync_form_geometry()
 
 
 if __name__ == "__main__":

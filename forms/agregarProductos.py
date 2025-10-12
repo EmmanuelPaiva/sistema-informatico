@@ -147,6 +147,8 @@ class Ui_Form(object):
         btnBar.addWidget(self.pushButton_2)
 
         self.pushButton = QPushButton("Guardar")
+        self.pushButton.setObjectName("btnGuardarProducto")           # PATCH permisos
+        self.pushButton.setProperty("perm_code", "productos.create")
         self.pushButton.setProperty("type", "primary")
         btnBar.addWidget(self.pushButton)
 

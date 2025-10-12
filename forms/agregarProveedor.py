@@ -134,8 +134,9 @@ class Ui_Form(object):
         btnBar.addWidget(self.pushButtonCancelar)
 
         self.pushButton = QPushButton("Guardar")
-        self.pushButton.setObjectName("pushButton")   # mantiene nombre original
-        self.pushButton.setProperty("type", "primary")
+        self.pushButton.setObjectName("btnAceptarProveedor")               # objectName para permisos
+        self.pushButton.setProperty("perm_code", "proveedores.create")     # permiso requerido
+        self.pushButton.setProperty("type", "primary")                     # estilo QSS
         btnBar.addWidget(self.pushButton)
 
         cardLay.addLayout(btnBar)

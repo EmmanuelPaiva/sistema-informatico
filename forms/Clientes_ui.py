@@ -170,7 +170,9 @@ class Ui_Form(object):
         hl.addWidget(self.btnExport)
 
         self.btnNuevo = QPushButton("Nuevo cliente", self.headerCard)
+        self.btnNuevo.setObjectName("btnClienteNuevo")               # PATCH permisos
         self.btnNuevo.setProperty("type","primary")
+        self.btnNuevo.setProperty("perm_code", "clientes.create") 
         self.btnNuevo.setIcon(icon("plus"))
         make_primary(self.btnNuevo)
         self.btnNuevo.clicked.connect(lambda: self.abrir_formulario(Form))

@@ -268,7 +268,11 @@ def agregar_botones_opciones_compra(treeWidget, item_compra, ui, Form):
     layout.setSpacing(12)
 
     btn_editar = QPushButton("Editar")
+    btn_editar.setObjectName("btnCompraEditar")               # PATCH permisos
+    btn_editar.setProperty("perm_code", "compras.update")
     btn_eliminar = QPushButton("Eliminar")
+    btn_eliminar.setObjectName("btnCompraEliminar")           # PATCH permisos
+    btn_eliminar.setProperty("perm_code", "compras.delete")
     btn_editar.setFixedHeight(25)
     btn_eliminar.setFixedHeight(25)
     btn_eliminar.setStyleSheet("background-color: red; color: white;")

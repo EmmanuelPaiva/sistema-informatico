@@ -1,8 +1,3 @@
-# -*- coding: utf-8 -*-
-
-################################################################################
-## Login window con lógica integrada (Argon2). NO recompilar desde .ui.
-################################################################################
 import os, sys
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
@@ -17,26 +12,28 @@ from PySide6.QtWidgets import (
 )
 
 # ---- importa tu autenticación (Argon2) ----
+authenticate = None
+_import_error = None
+e1 = None 
 try:
-    from Rodler_auth import authenticate
-except Exception as e:
-    import traceback
-    print("\n=== ERROR importando auth.authenticate ===")
-    print(e)
-    traceback.print_exc()
-    print("=========================================\n")
-    authenticate = None
+    # fallback: paquete/carpeta rodler_auth con __init__.py que expone authenticate
+    from Rodler_auth import authenticate as _auth_fn2
+    authenticate = _auth_fn2
+    _import_error = None
+except Exception as e2:
+    _import_error = (e1, e2)
 
 # ---- importa tu MenuPrincipal (como QWidget) ----
+MenuPrincipal = None
 try:
-    from MenuPrincipal import MenuPrincipal
+    from MenuPrincipal import MenuPrincipal as _MP
+    MenuPrincipal = _MP
 except Exception as e:
     import traceback
     print("\n=== ERROR importando MenuPrincipal ===")
     print(e)
     traceback.print_exc()
     print("======================================\n")
-    MenuPrincipal = None
 
 
 class Ui_MainWindow(object):
@@ -217,6 +214,14 @@ class LoginMainWindow(QMainWindow):
         self.login_payload = None
         self.appWidget = None  # referencia al MenuPrincipal embebido
 
+        # Si no se pudo importar authenticate, muestro aviso temprano
+        if authenticate is None:
+            self._set_status(
+                "No se encontró la función de autenticación.\n"
+                "Asegúrate de tener 'auth.py' con 'authenticate(usuario, clave)'.",
+                ok=False, visible=True
+            )
+
     # ---- UI helpers ----
     def _toggle_password(self, checked: bool):
         self.ui.linePass.setEchoMode(QLineEdit.Normal if checked else QLineEdit.Password)
@@ -241,10 +246,8 @@ class LoginMainWindow(QMainWindow):
     # ========== NUEVO: handler de logout ==========
     def _on_logout(self):
         """Vuelve a la pantalla de login y limpia el contenedor de la app."""
-        # 1) Eliminar MenuPrincipal embebido si existe
         if self.appWidget is not None:
             try:
-                # Desconectar la señal por si quedó conectada
                 self.appWidget.logoutRequested.disconnect(self._on_logout)
             except Exception:
                 pass
@@ -252,10 +255,7 @@ class LoginMainWindow(QMainWindow):
             self.appWidget.deleteLater()
             self.appWidget = None
 
-        # 2) Volver al login
         self.ui.stack.setCurrentWidget(self.ui.pageLogin)
-
-        # 3) UX: limpiar campos y enfocar usuario
         self.ui.linePass.clear()
         self.ui.lineIdent.setFocus()
         self._set_status("Sesión finalizada.", ok=True, visible=True)
@@ -266,13 +266,11 @@ class LoginMainWindow(QMainWindow):
             self._set_status("No se pudo cargar la aplicación principal (MenuPrincipal).", ok=False, visible=True)
             return
 
-        # asegura layout en pageApp
         layout = self.ui.pageApp.layout()
         if layout is None:
             layout = QVBoxLayout(self.ui.pageApp)
             layout.setContentsMargins(0, 0, 0, 0)
 
-        # limpia widgets previos
         while layout.count():
             item = layout.takeAt(0)
             w = item.widget()
@@ -280,52 +278,58 @@ class LoginMainWindow(QMainWindow):
                 w.setParent(None)
                 w.deleteLater()
 
-        # crea e inserta MenuPrincipal
         self.appWidget = MenuPrincipal(session=session, parent=self.ui.pageApp)
-
-        # ========== NUEVO: conectar la señal de logout ==========
-        self.appWidget.logoutRequested.connect(self._on_logout)
+        try:
+            self.appWidget.logoutRequested.connect(self._on_logout)
+        except Exception:
+            pass
 
         layout.addWidget(self.appWidget)
-
-        # navega a la app
         self.ui.stack.setCurrentWidget(self.ui.pageApp)
 
     # ---- Lógica de login ----
     def _on_login_clicked(self):
-        usuario = self.ui.lineIdent.text().strip()
-        clave = self.ui.linePass.text().strip()
+        usuario = (self.ui.lineIdent.text() or "").strip()
+        clave   = (self.ui.linePass.text()  or "").strip()
 
         if not usuario or not clave:
             self._set_status("Completá usuario y contraseña.", ok=False, visible=True)
             return
 
         if authenticate is None:
-            self._set_status("Falta auth.py (Argon2) o falló la importación.", ok=False, visible=True)
+            # si falló la importación, muestro el detalle
+            self._set_status(f"Falta auth.py (authenticate) o falló la importación: {_import_error}", ok=False, visible=True)
             return
 
         self.ui.btnLogin.setEnabled(False)
         self._set_status("Validando credenciales…", ok=False, visible=True)
         QApplication.processEvents()
 
+        # Normaliza username a lowercase (acorde al trigger normalize_username)
+        usuario_norm = usuario.lower()
+
         try:
-            ok, payload = authenticate(usuario, clave)
+            ok, payload = authenticate(usuario_norm, clave)
         except Exception as e:
+            # Mensaje amigable si el SQL interno usa 'rodler_auth.usuarios'
+            msg = str(e)
+            if "rodler_auth.usuarios" in msg or "relation \"rodler_auth.usuarios\"" in msg:
+                msg += "\n\nSugerencia: en tu authenticate(), cambia 'rodler_auth.usuarios' por 'rodler_auth.users'."
             self.ui.btnLogin.setEnabled(True)
-            self._set_status(f"Error de conexión/autenticación: {e}", ok=False, visible=True)
+            self._set_status(f"Error de conexión/autenticación: {msg}", ok=False, visible=True)
             return
 
         self.ui.btnLogin.setEnabled(True)
 
         if not ok:
-            self._set_status(str(payload), ok=False, visible=True)
+            # payload suele traer el texto del motivo
+            self._set_status(str(payload), ok=False, visible=True)  
             return
 
         self.login_payload = payload
-        u = payload.get("user", {}).get("username", usuario)
+        u = payload.get("user", {}).get("username", usuario_norm)
         roles = payload.get("roles", [])
         self._set_status(f"Bienvenido, {u}. Roles: {', '.join(roles) if roles else '—'}", ok=True, visible=True)
-
         self._show_app(payload)
 
 

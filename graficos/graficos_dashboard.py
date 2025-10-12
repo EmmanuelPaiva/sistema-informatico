@@ -31,14 +31,8 @@ from graficos.graficos_style import (
 apply_rodler_chart_style()
 
 
-# =========================
 # Conexión a PostgreSQL
-# =========================
 def get_engine():
-    """
-    Crea un SQLAlchemy engine a partir de variables de entorno.
-    Admite DATABASE_URL completa o PGUSER/PGPASSWORD/PGHOST/PGPORT/PGDATABASE.
-    """
     load_dotenv()
     url = os.getenv("DATABASE_URL")
     if url:
@@ -56,9 +50,8 @@ def get_engine():
     return create_engine(f"postgresql+psycopg2://{user}:{pwd}@{host}:{port}/{db}")
 
 
-# ============================================================
-# 1) Ventas vs Compras mensuales (barras agrupadas estilo mock)
-# ============================================================
+
+# 1) Ventas vs Compras mensuales
 def create_ventas_vs_compras_mensuales(engine=None, meses=12):
     engine = engine or get_engine()
     with engine.connect() as con:
@@ -114,9 +107,8 @@ def create_ventas_vs_compras_mensuales(engine=None, meses=12):
     return fig
 
 
-# ============================================================
+
 # 2) Gastos mensuales (línea suave estilo Pro)
-# ============================================================
 def create_gastos_mensuales(engine=None, meses=12):
     engine = engine or get_engine()
     with engine.connect() as con:

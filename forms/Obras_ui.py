@@ -173,7 +173,9 @@ class ObrasWidget(QWidget):
         self.btnExport.clicked.connect(self._exportar_excel_click)
 
         self.btnNueva = QPushButton("Nueva obra", self.headerCard)
+        self.btnNueva.setObjectName("btnObraNueva")   
         self.btnNueva.setProperty("type","primary")
+        self.btnNueva.setProperty("perm_code", "obras.create")
         self.btnNueva.setIcon(icon("plus"))
         make_primary(self.btnNueva)
         self.btnNueva.clicked.connect(self.mostrar_formulario_con_animacion)
@@ -394,13 +396,18 @@ class ObrasWidget(QWidget):
 
         # acciones (editar/eliminar icon-only)
         btnEdit = QPushButton()
+        btnEdit.setObjectName("btnObraEditar")
         btnEdit.setProperty("type", "icon")
-        btnEdit.setProperty("variant", "edit")      # <- azul
+        btnEdit.setProperty("variant", "edit")
+        btnEdit.setProperty("perm_code", "obras.update")
         btnEdit.setIcon(icon("edit"))
+        
 
         btnDel  = QPushButton()
+        btnDel.setObjectName("btnObraEliminar")
         btnDel.setProperty("type", "icon")
-        btnDel.setProperty("variant", "delete")     # <- rojo
+        btnDel.setProperty("variant", "delete")
+        btnDel.setProperty("perm_code", "obras.delete")
         btnDel.setIcon(icon("trash"))
 
         btnEdit.setToolTip("Editar obra")

@@ -102,9 +102,15 @@ def cargar_proveedores(tableWidget, edit_callback=None, main_form_widget=None):
             layout.setContentsMargins(0, 0, 0, 0)
 
             boton_editar = QPushButton("Editar")
+            # Permission identifiers
+            boton_editar.setObjectName("btnProveedorEditar")
+            boton_editar.setProperty("perm_code", "proveedores.update")
             boton_editar.setStyleSheet("background-color: #3498db; color: white; border-radius: 5px; padding: 4px;")
 
             boton_eliminar = QPushButton("Eliminar")
+            # Permission identifiers
+            boton_eliminar.setObjectName("btnProveedorEliminar")
+            boton_eliminar.setProperty("perm_code", "proveedores.delete")
             boton_eliminar.setStyleSheet("background-color: #e00000; color: white; border-radius: 5px; padding: 4px;")
 
             layout.addWidget(boton_editar)
@@ -118,6 +124,23 @@ def cargar_proveedores(tableWidget, edit_callback=None, main_form_widget=None):
                 boton_editar.clicked.connect(lambda: None)
 
             boton_eliminar.clicked.connect(partial(eliminar_proveedor, id_prov, tableWidget))
+
+        # Re-apply permissions if the page holds a reference to MenuPrincipal
+        try:
+            p = tableWidget
+            page = None
+            menu_ref = None
+            # climb parents to find container with menuPrincipalRef
+            while p is not None:
+                if hasattr(p, 'menuPrincipalRef'):
+                    page = p
+                    menu_ref = getattr(p, 'menuPrincipalRef', None)
+                    break
+                p = p.parent() if hasattr(p, 'parent') else None
+            if menu_ref and page:
+                menu_ref._apply_permissions_to_module_page("Proveedores", page)
+        except Exception:
+            pass
 
     except Exception as e:
         print(f"Error al cargar proveedores: {e}")
@@ -168,9 +191,13 @@ def buscar_proveedores(nombre, tableWidget, edit_callback=None, main_form_widget
             layout.setContentsMargins(0, 0, 0, 0)
 
             boton_editar = QPushButton("Editar")
+            boton_editar.setObjectName("btnProveedorEditar")                # PATCH permisos
+            boton_editar.setProperty("perm_code", "proveedores.update")  
             boton_editar.setStyleSheet("background-color: #3498db; color: white; border-radius: 5px; padding: 4px;")
 
             boton_eliminar = QPushButton("Eliminar")
+            boton_eliminar.setObjectName("btnProveedorEliminar")            # PATCH permisos
+            boton_eliminar.setProperty("perm_code", "proveedores.delete")  
             boton_eliminar.setStyleSheet("background-color: #e00000; color: white; border-radius: 5px; padding: 4px;")
 
             layout.addWidget(boton_editar)
@@ -183,6 +210,22 @@ def buscar_proveedores(nombre, tableWidget, edit_callback=None, main_form_widget
                 boton_editar.clicked.connect(lambda: None)
 
             boton_eliminar.clicked.connect(partial(eliminar_proveedor, id_prov, tableWidget))
+
+        # Re-apply permissions after search refresh
+        try:
+            p = tableWidget
+            page = None
+            menu_ref = None
+            while p is not None:
+                if hasattr(p, 'menuPrincipalRef'):
+                    page = p
+                    menu_ref = getattr(p, 'menuPrincipalRef', None)
+                    break
+                p = p.parent() if hasattr(p, 'parent') else None
+            if menu_ref and page:
+                menu_ref._apply_permissions_to_module_page("Proveedores", page)
+        except Exception:
+            pass
 
     except Exception as e:
         print(f"Error al buscar proveedores: {e}")

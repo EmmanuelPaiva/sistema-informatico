@@ -198,6 +198,8 @@ class Ui_Form(object):
 
         self.pushButtonAceptar = QPushButton("Aceptar")
         self.pushButtonAceptar.setProperty("type", "primary")
+        self.pushButtonAceptar.setProperty("perm_code", "ventas.create")
+        self.pushButtonAceptar.setObjectName("btnAceptarVenta")          # PATCH permisos
         make_primary(self.pushButtonAceptar)
         self.pushButtonAceptar.setMinimumHeight(28)
         bottomBar.addWidget(self.pushButtonAceptar)

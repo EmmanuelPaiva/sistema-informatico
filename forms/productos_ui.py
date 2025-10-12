@@ -234,7 +234,9 @@ class Ui_Form(object):
         self.pushButton.setMinimumSize(120, 34)
         self.pushButton.setMaximumWidth(220)
         self.pushButton.setText("Agregar producto")
+        self.pushButton.setObjectName("btnProductoNuevo")               # PATCH permisos
         self.pushButton.setProperty("type", "primary")
+        self.pushButton.setProperty("perm_code", "productos.create") 
         self.pushButton.setIcon(icon("plus"))
         make_primary(self.pushButton)
         self.pushButton.clicked.connect(self.mostrar_formulario)
@@ -452,7 +454,11 @@ class Ui_Form(object):
 
         # Icon-only + color forzado
         btn_edit = QPushButton("")
+        btn_edit.setObjectName("btnProductoEditar")                # PATCH permisos
+        btn_edit.setProperty("perm_code", "productos.update") 
         btn_del  = QPushButton("")
+        btn_del.setObjectName("btnProductoEliminar")               # PATCH permisos
+        btn_del.setProperty("perm_code", "productos.delete")
         _style_action_button(btn_edit, "edit")
         _style_action_button(btn_del, "delete")
 

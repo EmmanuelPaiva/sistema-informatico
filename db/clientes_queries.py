@@ -94,9 +94,13 @@ def cargar_clientes(tableWidget, edit_callback=None, main_form_widget=None):
             layout.setContentsMargins(0, 0, 0, 0)
 
             boton_editar = QPushButton("Editar")
+            boton_editar.setObjectName("btnClienteEditar")               # PATCH permisos
+            boton_editar.setProperty("perm_code", "clientes.update") 
             boton_editar.setStyleSheet("background-color: #3498db; color: white; border-radius: 5px; padding: 4px;")
 
             boton_eliminar = QPushButton("Eliminar")
+            boton_eliminar.setObjectName("btnClienteEliminar")           # PATCH permisos
+            boton_eliminar.setProperty("perm_code", "clientes.delete")
             boton_eliminar.setStyleSheet("background-color: #e00000; color: white; border-radius: 5px; padding: 4px;")
 
             layout.addWidget(boton_editar)

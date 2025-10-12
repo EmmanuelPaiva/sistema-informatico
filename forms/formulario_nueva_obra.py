@@ -92,6 +92,8 @@ class FormularioNuevaObra(QWidget):
         # Botones
         botones_layout = QHBoxLayout()
         self.btn_aceptar = QPushButton("Aceptar")
+        self.btn_aceptar.setObjectName("btnAceptarObra")         # PATCH permisos
+        self.btn_aceptar.setProperty("perm_code", "obras.create")
         self.btn_cancelar = QPushButton("Cancelar")
         botones_layout.addWidget(self.btn_cancelar)
         botones_layout.addStretch()
