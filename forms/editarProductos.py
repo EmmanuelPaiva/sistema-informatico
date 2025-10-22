@@ -77,46 +77,19 @@ class Ui_Form(object):
 
         self.pushButtonGC = QPushButton(Form)
         self.pushButtonGC.setObjectName(u"pushButtonGC")
+        self.pushButtonGC.setProperty("type", "primary")
 
         self.gridLayout.addWidget(self.pushButtonGC, 2, 4, 1, 2)
 
         self.pushButtonCancelar = QPushButton(Form)
         self.pushButtonCancelar.setObjectName(u"pushButtonCancelar")
+        self.pushButtonCancelar.setProperty("type", "secondary")
 
         self.gridLayout.addWidget(self.pushButtonCancelar, 2, 6, 1, 1)
 
 
         self.retranslateUi(Form)
-
         QMetaObject.connectSlotsByName(Form)
-        
-        Form.setStyleSheet("""
-            QWidget {
-            background-color: #f0f0f0;
-            font-family: 'Segoe UI';
-            font-size: 12px;
-            }
-            QLabel {
-                margin: 0px;
-                padding: 0px;
-                color: #2c3e50;
-                font-size: 12px;
-            }
-            QLineEdit, QComboBox {
-                font-size: 14px;
-                padding: 1px;
-                border: 1px solid #ccc;
-                border-radius: 5px;
-                background-color: #ffffff;
-            }
-            QPushButton {
-                padding: 3px 6px;
-                border: none;
-                background-color: #3498db;
-                border-radius: 5px;
-                color: white;
-            }
-        """)
     # setupUi
 
     def retranslateUi(self, Form):

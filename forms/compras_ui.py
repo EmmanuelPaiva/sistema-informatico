@@ -1,10 +1,9 @@
-# compras_willow.py
-import sys, os, platform
+# compras_willow.py — UI con título mejorado e iconización estable
+import sys, os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from pathlib import Path
-from PySide6.QtCore import (QCoreApplication, QRect, QSize, Qt, QPropertyAnimation, QObject, QEvent, QTimer)
-from PySide6.QtGui import QIcon
+from PySide6.QtCore import (QCoreApplication, QRect, Qt, QPropertyAnimation, QObject, QEvent, QTimer)
+from PySide6.QtGui import QIcon, QFont
 from PySide6.QtWidgets import (
     QApplication, QFrame, QGridLayout, QLabel, QPushButton, QVBoxLayout, QWidget,
     QTreeWidget, QHeaderView, QHBoxLayout, QFileDialog, QMessageBox, QLineEdit,
@@ -21,142 +20,29 @@ from utils.utilsCompras import borrar_fila
 from reports.excel import export_qtree_to_excel
 
 from forms.ui_helpers import (
-    apply_global_styles, mark_title, make_primary, make_danger, style_search
+    apply_global_styles, mark_title, make_primary, style_search
 )
+from main.themes import themed_icon
 
 # ---- Constantes UI
 ROW_HEIGHT = 48
-BTN_MIN_HEIGHT = 32   # alineado con Productos
-OPCIONES_COL = 6      # índice de "Opciones"
+BTN_MIN_HEIGHT = 32
+OPCIONES_COL = 6
 
-
-# ---- Iconos (rodlerIcons en escritorio/OneDrive)
-def _desktop_dir() -> Path:
-    home = Path.home()
-    if platform.system().lower().startswith("win"):
-        for env in ("ONEDRIVE", "OneDrive", "OneDriveConsumer"):
-            od = os.environ.get(env)
-            if od:
-                d = Path(od) / "Desktop"
-                if d.exists():
-                    return d
-        d = Path(os.environ.get("USERPROFILE", str(home))) / "Desktop"
-        return d if d.exists() else home
-    d = home / "Desktop"
-    return d if d.exists() else home
-
-ICON_DIR = _desktop_dir() / "sistema-informatico" / "rodlerIcons"
 def icon(name: str) -> QIcon:
-    p = ICON_DIR / f"{name}.svg"
-    return QIcon(str(p)) if p.exists() else QIcon()
-
-
-# ---- QSS Willow (mismo que módulos anteriores)
-QSS_WILLOW = """
-* { font-family: "Segoe UI", Arial, sans-serif; color:#0F172A; font-size:13px; }
-QWidget { background:#F5F7FB; }
-QLabel { background: transparent; }
-
-/* Cards */
-#headerCard, #tableCard, QTreeWidget {
-  background:#FFFFFF;
-  border:1px solid #E8EEF6;
-  border-radius:16px;
-}
-
-/* Título */
-QLabel[role="pageTitle"] { font-size:18px; font-weight:800; color:#0F172A; }
-
-/* Buscador */
-QLineEdit#searchBox {
-  background:#F1F5F9;
-  border:1px solid #E8EEF6;
-  border-radius:10px;
-  padding:8px 12px;
-}
-QLineEdit#searchBox:focus { border-color:#90CAF9; }
-
-/* Botón primario */
-QPushButton[type="primary"] {
-  background:#2979FF;
-  border:1px solid #2979FF;
-  color:#FFFFFF;
-  border-radius:10px;
-  padding:8px 12px;
-}
-QPushButton[type="primary"]:hover { background:#3b86ff; }
-
-/* Botones icon-only base */
-QPushButton[type="icon"] {
-  background: transparent;
-  border: none;
-  color:#64748B;
-  padding:6px 10px;
-  border-radius:8px;
-  qproperty-iconSize: 18px 18px;
-}
-QPushButton[type="icon"]:hover {
-  background: rgba(41,121,255,.10);
-  color:#0F172A;
-}
-
-/* Variantes coloreadas (igual que Productos) */
-QPushButton[type="icon"][variant="edit"] {
-  background:#EAF2FF;
-  color:#1D4ED8;
-}
-QPushButton[type="icon"][variant="edit"]:hover {
-  background:#DCEBFF;
-  color:#1E40AF;
-}
-QPushButton[type="icon"][variant="delete"] {
-  background:#FEECEC;
-  color:#DC2626;
-}
-QPushButton[type="icon"][variant="delete"]:hover {
-  background:#FDDDDD;
-  color:#B91C1C;
-}
-
-/* Header/selección tabla */
-QHeaderView::section {
-  background:#F8FAFF;
-  color:#0F172A;
-  padding:10px;
-  border:none;
-  border-right:1px solid #E8EEF6;
-}
-QTreeWidget {
-  selection-background-color: rgba(41,121,255,.15);
-  selection-color:#0F172A;
-  border:1px solid #E8EEF6;
-  border-radius:16px;
-}
-"""
-
+    return themed_icon(name)
 
 class _ResizeWatcher(QObject):
-    """Ajusta columnas del QTreeWidget al redimensionar la tabla."""
-    def __init__(self, owner):
-        super().__init__()
-        self.owner = owner
+    def __init__(self, owner): super().__init__(); self.owner = owner
     def eventFilter(self, obj, event):
-        if event.type() == QEvent.Resize:
-            self.owner._ajustar_columnas()
+        if event.type() == QEvent.Resize: self.owner._ajustar_columnas()
         return False
-
 
 class _ParentResizeWatcher(QObject):
-    """Mantiene pegado el panel deslizante a la derecha del Form al redimensionar."""
-    def __init__(self, ui):
-        super().__init__()
-        self.ui = ui
+    def __init__(self, ui): super().__init__(); self.ui = ui
     def eventFilter(self, obj, event):
-        if event.type() == QEvent.Resize:
-            # Recalcular la geometría del panel si está visible
-            self.ui._sync_form_geometry()
+        if event.type() == QEvent.Resize: self.ui._sync_form_geometry()
         return False
-
 
 class Ui_Form(object):
     def setupUi(self, Form):
@@ -164,9 +50,8 @@ class Ui_Form(object):
             Form.setObjectName("Form")
         Form.resize(1000, 660)
 
-        # Guardamos referencia al host para el watcher
         self._host = Form
-        self._slide_width = 450  # ancho lógico del panel
+        self._slide_width = 450
 
         # ===== Layout raíz
         self.gridLayout = QGridLayout(Form)
@@ -174,13 +59,20 @@ class Ui_Form(object):
         self.gridLayout.setHorizontalSpacing(10)
         self.gridLayout.setVerticalSpacing(10)
 
-        # ===== Header (misma línea: título + buscador + botones)
+        # ===== Header
         self.headerCard = QFrame(Form); self.headerCard.setObjectName("headerCard")
         hl = QHBoxLayout(self.headerCard); hl.setContentsMargins(16,12,16,12); hl.setSpacing(10)
 
-        self.labelCompras = QLabel("Compras", self.headerCard)
+        self.labelCompras = QLabel("COMPRAS", self.headerCard)
         self.labelCompras.setProperty("role", "pageTitle")
+        # estilo elegante en mayúsculas
+        f = QFont(self.labelCompras.font())
+        f.setBold(True)
+        f.setPointSize(20)
+        f.setLetterSpacing(QFont.PercentageSpacing, 105)  # +5%
+        self.labelCompras.setFont(f)
         mark_title(self.labelCompras)
+
         hl.addWidget(self.labelCompras)
         hl.addStretch(1)
 
@@ -202,7 +94,7 @@ class Ui_Form(object):
         hl.addWidget(self.pushButtonExportar)
 
         self.pushButtonNuevaCompra = QPushButton("Nueva compra", self.headerCard)
-        self.pushButtonNuevaCompra.setObjectName("btnCompraNueva")            # PATCH permisos
+        self.pushButtonNuevaCompra.setObjectName("btnCompraNueva")
         self.pushButtonNuevaCompra.setProperty("perm_code", "compras.create")
         self.pushButtonNuevaCompra.setProperty("type","primary")
         self.pushButtonNuevaCompra.setIcon(icon("plus"))
@@ -241,21 +133,16 @@ class Ui_Form(object):
         # Señales
         self.searchBox.textChanged.connect(self._filtrar)
 
-        # Watchers de resize
-        self._resizeWatcher = _ResizeWatcher(self)
-        self.treeWidget.installEventFilter(self._resizeWatcher)
+        # Watchers
+        self._resizeWatcher = _ResizeWatcher(self); self.treeWidget.installEventFilter(self._resizeWatcher)
+        self._parentWatcher = _ParentResizeWatcher(self); Form.installEventFilter(self._parentWatcher)
 
-        self._parentWatcher = _ParentResizeWatcher(self)
-        Form.installEventFilter(self._parentWatcher)
-
-        # Estilos globales + Willow
+        # Estilos globales
         apply_global_styles(Form)
-        Form.setStyleSheet(QSS_WILLOW)
 
         self.retranslateUi(Form)
-        # QMetaObject.connectSlotsByName(Form)  # opcional
 
-        # Cargar datos y post-estética
+        # Cargar datos (la función ahora resuelve el tree si cambiara el nombre/orden)
         setRowsTreeWidget(self, Form)
         self._post_refresh()
 
@@ -266,8 +153,7 @@ class Ui_Form(object):
     def exportar_excel_compras(self):
         try:
             ruta, _ = QFileDialog.getSaveFileName(None, "Guardar como", "Compras.xlsx", "Excel (*.xlsx)")
-            if not ruta:
-                return
+            if not ruta: return
             export_qtree_to_excel(self.treeWidget, ruta, title="Compras")
             QMessageBox.information(None, "Éxito", "Exportación completada.")
         except Exception as e:
@@ -275,29 +161,26 @@ class Ui_Form(object):
 
     # ===== Slide-out helpers
     def _sync_form_geometry(self):
-        """Mantiene pegado el formulario al borde derecho del contenedor."""
         if not hasattr(self, 'formulario_nueva_compra') or not self.formulario_nueva_compra.isVisible():
             return
         host_w = max(self._host.width(), 0)
         host_h = max(self._host.height(), 0)
-        panel_w = min(self._slide_width, max(280, host_w))  # nunca más ancho que el host; mínimo 280
+        panel_w = min(self._slide_width, max(280, host_w))
         x = host_w - panel_w
         self.formulario_nueva_compra.setGeometry(x, 0, panel_w, host_h)
 
-    # ===== Slide-out cancelar
     def cancelar(self, Form):
         if hasattr(self, 'formulario_nueva_compra') and self.formulario_nueva_compra.isVisible():
-            ancho_formulario = self.formulario_nueva_compra.width()
-            alto_formulario  = Form.height()
+            w = self.formulario_nueva_compra.width()
+            h = Form.height()
             self.anim = QPropertyAnimation(self.formulario_nueva_compra, b"geometry")
             self.anim.setDuration(300)
-            self.anim.setStartValue(QRect(Form.width() - ancho_formulario, 0, ancho_formulario, alto_formulario))
-            self.anim.setEndValue(QRect(Form.width(), 0, ancho_formulario, alto_formulario))
-            # cerrar al terminar la animación
+            self.anim.setStartValue(QRect(Form.width() - w, 0, w, h))
+            self.anim.setEndValue(QRect(Form.width(), 0, w, h))
             self.anim.finished.connect(self.formulario_nueva_compra.close)
             self.anim.start()
 
-    # ===== Alta compra
+    # ===== Alta/edición compra
     def abrir_formulario_nueva_compra(self, Form, edicion=False):
         if hasattr(self, 'formulario_nueva_compra') and self.formulario_nueva_compra.isVisible():
             return
@@ -309,37 +192,38 @@ class Ui_Form(object):
         if hasattr(self.ui_nueva_compra, "labelCliente"):
             self.ui_nueva_compra.labelCliente.setText("Proveedor")
 
-        agrega_prodcuto_a_fila(self.ui_nueva_compra)
+        # ✅ SOLO agregamos la fila inicial cuando NO es edición
+        if not edicion:
+            agrega_prodcuto_a_fila(self.ui_nueva_compra)
 
-        # Ancho/alto iniciales
-        ancho_formulario = min(self._slide_width, max(280, Form.width()))
-        alto_formulario  = Form.height()
-
-        # Posición inicial fuera de pantalla (derecha) para animar entrada
-        self.formulario_nueva_compra.setGeometry(Form.width(), 0, ancho_formulario, alto_formulario)
+        # Slide in
+        w = min(self._slide_width, max(280, Form.width()))
+        h = Form.height()
+        self.formulario_nueva_compra.setGeometry(Form.width(), 0, w, h)
         self.formulario_nueva_compra.show()
 
-        # Animación de entrada
         self.anim = QPropertyAnimation(self.formulario_nueva_compra, b"geometry")
         self.anim.setDuration(300)
-        self.anim.setStartValue(QRect(Form.width(), 0, ancho_formulario, alto_formulario))
-        self.anim.setEndValue(QRect(Form.width() - ancho_formulario, 0, ancho_formulario, alto_formulario))
+        self.anim.setStartValue(QRect(Form.width(), 0, w, h))
+        self.anim.setEndValue(QRect(Form.width() - w, 0, w, h))
         self.anim.start()
 
-        # Sincroniza la geometría en el próximo ciclo de eventos y al terminar la animación
         QTimer.singleShot(0, self._sync_form_geometry)
         self.anim.finished.connect(self._sync_form_geometry)
 
         if not edicion:
             try:
-                with conexion() as c:
-                    with c.cursor() as cur:
-                        cur.execute("SELECT id_proveedor, nombre FROM proveedores;")
-                        proveedores = cur.fetchall()
+                with conexion() as c, c.cursor() as cur:
+                    cur.execute("SELECT id_proveedor, nombre FROM proveedores ORDER BY nombre;")
+                    proveedores = cur.fetchall()
+                self.ui_nueva_compra.comboBox.clear()
                 for idP, nombreP in proveedores:
                     self.ui_nueva_compra.comboBox.addItem(nombreP, idP)
+
                 if self.ui_nueva_compra.comboBox.count() > 0:
                     self.ui_nueva_compra.comboBox.setCurrentIndex(0)
+
+                # ✅ estas señales SOLO para alta nueva (para edición las manejamos nosotros)
                 self.ui_nueva_compra.comboBox.currentIndexChanged.connect(
                     lambda: reiniciar_tabla_productos(self.ui_nueva_compra)
                 )
@@ -357,15 +241,15 @@ class Ui_Form(object):
 
     # ===== Utilidades UI
     def _filtrar(self, texto: str):
-        """Filtra por Proveedor (2), Factura (5) o Medio (4)."""
         q = (texto or "").strip().lower()
+        root = self.treeWidget.rootIndex()
         for i in range(self.treeWidget.topLevelItemCount()):
             item = self.treeWidget.topLevelItem(i)
             proveedor = (item.text(2) or "").lower()
             medio     = (item.text(4) or "").lower()
             factura   = (item.text(5) or "").lower()
             visible = (q in proveedor) or (q in medio) or (q in factura)
-            self.treeWidget.setRowHidden(i, self.treeWidget.rootIndex(), not visible)
+            self.treeWidget.setRowHidden(i, root, not visible)
         self._post_refresh()
 
     def _post_refresh(self):
@@ -379,7 +263,6 @@ class Ui_Form(object):
             header.setSectionResizeMode(col, QHeaderView.Stretch)
         header.setSectionResizeMode(OPCIONES_COL, QHeaderView.ResizeToContents)
 
-    # Centrado de contenido
     def _center_cells(self):
         def process_item(item):
             for col in (1,2,3,4,5):
@@ -389,33 +272,29 @@ class Ui_Form(object):
         for i in range(self.treeWidget.topLevelItemCount()):
             process_item(self.treeWidget.topLevelItem(i))
 
-    # Botones de Opciones: icon-only con color (igual que Productos)
     def _iconize_option_buttons(self):
+        # asegura que "Editar / Eliminar" siempre sean icon-only con color
         for i in range(self.treeWidget.topLevelItemCount()):
             item = self.treeWidget.topLevelItem(i)
             w = self.treeWidget.itemWidget(item, OPCIONES_COL)
-            if not w:
-                continue
+            if not w: continue
             for btn in w.findChildren(QPushButton):
                 lower = (btn.text() or "").lower()
                 if "edit" in lower or "editar" in lower:
                     btn.setProperty("type", "icon")
-                    btn.setProperty("variant", "edit")     # AZUL SUAVE
+                    btn.setProperty("variant", "edit")
                     btn.setIcon(icon("edit"))
                     btn.setText("")
                     btn.setToolTip("Editar compra")
                 elif "del" in lower or "elimin" in lower or "borrar" in lower:
                     btn.setProperty("type", "icon")
-                    btn.setProperty("variant", "delete")   # ROJO SUAVE
+                    btn.setProperty("variant", "delete")
                     btn.setIcon(icon("trash"))
                     btn.setText("")
                     btn.setToolTip("Eliminar compra")
                 else:
                     continue
-
-                btn.setMinimumHeight(BTN_MIN_HEIGHT)
                 btn.setCursor(Qt.PointingHandCursor)
-                # refrescar estilo para que tome las nuevas props
                 btn.style().unpolish(btn); btn.style().polish(btn)
 
 

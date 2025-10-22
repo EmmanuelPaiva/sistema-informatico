@@ -23,49 +23,6 @@ class Ui_Form(object):
         if not Form.objectName():
             Form.setObjectName(u"Form")
         Form.resize(805, 245)
-        Form.setStyleSheet("""
-            QWidget {
-                background-color: #fafafa;
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                font-size: 15px;
-                color: #2c3e50;
-            }
-            QLabel {
-                font-weight: 600;
-                margin-bottom: 4px;
-            }
-            QLineEdit, QComboBox {
-                border: 1.8px solid #bdc3c7;
-                border-radius: 8px;
-                padding: 6px 10px;
-                background-color: #ffffff;
-                selection-background-color: #3498db;
-                selection-color: white;
-                transition: border-color 0.3s ease;
-            }
-            QLineEdit:focus, QComboBox:focus {
-                border-color: #2980b9;
-                background-color: #ecf6fc;
-            }
-            QPushButton {
-                background-color: #2980b9;
-                color: white;
-                border-radius: 10px;
-                padding: 8px 18px;
-                font-weight: 700;
-                min-width: 100px;
-                border: none;
-                cursor: pointer;
-                transition: background-color 0.3s ease;
-            }
-            QPushButton:hover {
-                background-color: #3498db;
-            }
-            QPushButton:pressed {
-                background-color: #1f618d;
-            }
-
-            """)
         Form.setMinimumSize(QSize(805, 0))
         self.gridLayout = QGridLayout(Form)
         self.gridLayout.setObjectName(u"gridLayout")
@@ -86,6 +43,7 @@ class Ui_Form(object):
 
         self.pushButtonAceptar = QPushButton(Form)
         self.pushButtonAceptar.setObjectName(u"pushButtonAceptar")
+        self.pushButtonAceptar.setProperty("type", "primary")
 
         self.gridLayout.addWidget(self.pushButtonAceptar, 2, 3, 1, 1)
 
@@ -106,6 +64,7 @@ class Ui_Form(object):
 
         self.pushButtonCancelar = QPushButton(Form)
         self.pushButtonCancelar.setObjectName(u"pushButtonCancelar")
+        self.pushButtonCancelar.setProperty("type", "secondary")
 
         self.gridLayout.addWidget(self.pushButtonCancelar, 2, 4, 1, 1)
 

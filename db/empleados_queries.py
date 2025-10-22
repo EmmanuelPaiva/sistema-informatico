@@ -94,10 +94,18 @@ def cargar_clientes(tableWidget, edit_callback=None, main_form_widget=None):
             layout.setContentsMargins(0, 0, 0, 0)
 
             boton_editar = QPushButton("Editar")
-            boton_editar.setStyleSheet("background-color: #3498db; color: white; border-radius: 5px; padding: 4px;")
+            boton_editar.setObjectName("btnEmpleadoEditar")
+            boton_editar.setProperty("perm_code", "empleados.update")
+            boton_editar.setProperty("type", "primary")
+            boton_editar.setCursor(Qt.PointingHandCursor)
+            boton_editar.style().unpolish(boton_editar); boton_editar.style().polish(boton_editar)
 
             boton_eliminar = QPushButton("Eliminar")
-            boton_eliminar.setStyleSheet("background-color: #e00000; color: white; border-radius: 5px; padding: 4px;")
+            boton_eliminar.setObjectName("btnEmpleadoEliminar")
+            boton_eliminar.setProperty("perm_code", "empleados.delete")
+            boton_eliminar.setProperty("type", "danger")
+            boton_eliminar.setCursor(Qt.PointingHandCursor)
+            boton_eliminar.style().unpolish(boton_eliminar); boton_eliminar.style().polish(boton_eliminar)
 
             layout.addWidget(boton_editar)
             layout.addWidget(boton_eliminar)
@@ -171,10 +179,18 @@ def buscar_clientes(texto, tableWidget, edit_callback=None, main_form_widget=Non
             layout.setContentsMargins(0, 0, 0, 0)
 
             boton_editar = QPushButton("Editar")
-            boton_editar.setStyleSheet("background-color: #3498db; color: white; border-radius: 5px; padding: 4px;")
+            boton_editar.setObjectName("btnEmpleadoEditar")
+            boton_editar.setProperty("perm_code", "empleados.update")
+            boton_editar.setProperty("type", "primary")
+            boton_editar.setCursor(Qt.PointingHandCursor)
+            boton_editar.style().unpolish(boton_editar); boton_editar.style().polish(boton_editar)
 
             boton_eliminar = QPushButton("Eliminar")
-            boton_eliminar.setStyleSheet("background-color: #e00000; color: white; border-radius: 5px; padding: 4px;")
+            boton_eliminar.setObjectName("btnEmpleadoEliminar")
+            boton_eliminar.setProperty("perm_code", "empleados.delete")
+            boton_eliminar.setProperty("type", "danger")
+            boton_eliminar.setCursor(Qt.PointingHandCursor)
+            boton_eliminar.style().unpolish(boton_eliminar); boton_eliminar.style().polish(boton_eliminar)
 
             layout.addWidget(boton_editar)
             layout.addWidget(boton_eliminar)

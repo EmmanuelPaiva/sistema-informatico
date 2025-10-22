@@ -107,21 +107,10 @@ class GastoFormWidget(QWidget):
         botones.addWidget(self.btn_guardar)
         root_layout.addLayout(botones)
 
-        # Estilos (colores Rodler)
-        self.setStyleSheet("""
-            #GastoFormFrame {
-                background: #ffffff;
-                border: 1px solid #0097e6;
-                border-radius: 10px;
-            }
-            QLineEdit, QComboBox, QDateEdit, QDoubleSpinBox {
-                padding: 6px; border: 1px solid #dcdde1; border-radius: 6px; background: #ffffff;
-                color: black;
-            }
-            QPushButton { padding: 8px 12px; border-radius: 6px; color: white; background-color: #0097e6; }
-            QPushButton#cancel { background-color: #7f8c8d; }
-            QPushButton:hover { background-color: #00a8ff; }
-        """)
+        # Estilos locales removidos: usar QSS global (main/themes.py)
+        # Configurar tipos para botones y permitir que el QSS global los pinte
+        self.btn_guardar.setProperty("type", "primary")
+        self.btn_cancelar.setProperty("type", "secondary")
 
         # Conexiones
         self.btn_guardar.clicked.connect(self._submit)

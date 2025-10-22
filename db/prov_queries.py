@@ -104,14 +104,20 @@ def cargar_proveedores(tableWidget, edit_callback=None, main_form_widget=None):
             boton_editar = QPushButton("Editar")
             # Permission identifiers
             boton_editar.setObjectName("btnProveedorEditar")
-            boton_editar.setProperty("perm_code", "proveedores.update")
-            boton_editar.setStyleSheet("background-color: #3498db; color: white; border-radius: 5px; padding: 4px;")
+            boton_editar.setProperty("perm_code", "proveedores.update")  
+            boton_editar.setProperty("type", "primary")
+            boton_editar.setCursor(Qt.PointingHandCursor)
+            boton_editar.style().unpolish(boton_editar); boton_editar.style().polish(boton_editar)
+            boton_editar.style().unpolish(boton_editar); boton_editar.style().polish(boton_editar)
 
             boton_eliminar = QPushButton("Eliminar")
             # Permission identifiers
             boton_eliminar.setObjectName("btnProveedorEliminar")
-            boton_eliminar.setProperty("perm_code", "proveedores.delete")
-            boton_eliminar.setStyleSheet("background-color: #e00000; color: white; border-radius: 5px; padding: 4px;")
+            boton_eliminar.setProperty("perm_code", "proveedores.delete")  
+            boton_eliminar.setProperty("type", "danger")
+            boton_eliminar.setCursor(Qt.PointingHandCursor)
+            boton_eliminar.style().unpolish(boton_eliminar); boton_eliminar.style().polish(boton_eliminar)
+            boton_eliminar.style().unpolish(boton_eliminar); boton_eliminar.style().polish(boton_eliminar)
 
             layout.addWidget(boton_editar)
             layout.addWidget(boton_eliminar)
@@ -193,12 +199,14 @@ def buscar_proveedores(nombre, tableWidget, edit_callback=None, main_form_widget
             boton_editar = QPushButton("Editar")
             boton_editar.setObjectName("btnProveedorEditar")                # PATCH permisos
             boton_editar.setProperty("perm_code", "proveedores.update")  
-            boton_editar.setStyleSheet("background-color: #3498db; color: white; border-radius: 5px; padding: 4px;")
+            boton_editar.setProperty("type", "primary")
+            boton_editar.setCursor(Qt.PointingHandCursor)
 
             boton_eliminar = QPushButton("Eliminar")
             boton_eliminar.setObjectName("btnProveedorEliminar")            # PATCH permisos
             boton_eliminar.setProperty("perm_code", "proveedores.delete")  
-            boton_eliminar.setStyleSheet("background-color: #e00000; color: white; border-radius: 5px; padding: 4px;")
+            boton_eliminar.setProperty("type", "danger")
+            boton_eliminar.setCursor(Qt.PointingHandCursor)
 
             layout.addWidget(boton_editar)
             layout.addWidget(boton_eliminar)

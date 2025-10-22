@@ -25,8 +25,10 @@ from reports.excel import export_qtable_to_excel
 
 # Estilos/helpers existentes
 from forms.ui_helpers import (
-    apply_global_styles, mark_title, make_primary, make_danger, style_search
+    apply_global_styles, mark_title, make_primary, style_search
 )
+
+from main.themes import themed_icon
 
 # === Consistencia con tu módulo original ===
 OPCIONES_MIN_WIDTH = 140
@@ -36,81 +38,8 @@ ICON_PX = 18
 OPCIONES_COL = 7
 SLIDE_WIDTH = 450  # ancho lógico del panel deslizante (igual que antes)
 
-# ---------------- Iconos (rodlerIcons en Escritorio/OneDrive) ----------------
-def _desktop_dir() -> Path:
-    home = Path.home()
-    if platform.system().lower().startswith("win"):
-        for env in ("ONEDRIVE", "OneDrive", "OneDriveConsumer"):
-            od = os.environ.get(env)
-            if od:
-                d = Path(od) / "Desktop"
-                if d.exists():
-                    return d
-        d = Path(os.environ.get("USERPROFILE", str(home))) / "Desktop"
-        return d if d.exists() else home
-    d = home / "Desktop"
-    return d if d.exists() else home
-
-ICON_DIR = _desktop_dir() / "sistema-informatico" / "rodlerIcons"
 def icon(name: str) -> QIcon:
-    p = ICON_DIR / f"{name}.svg"
-    return QIcon(str(p)) if p.exists() else QIcon()
-
-
-# ---------------- QSS Willow (como el tuyo) ----------------
-QSS_WILLOW = """
-* { font-family: "Segoe UI", Arial, sans-serif; color:#0F172A; font-size:13px; }
-QWidget { background:#F5F7FB; }
-QLabel { background: transparent; }
-
-/* Cards */
-#headerCard, #tableCard, QTreeWidget {
-  background:#FFFFFF;
-  border:1px solid #E8EEF6;
-  border-radius:16px;
-}
-
-/* Título */
-QLabel[role="pageTitle"] { font-size:18px; font-weight:800; color:#0F172A; }
-
-/* Buscador */
-QLineEdit#searchBox {
-  background:#F1F5F9;
-  border:1px solid #E8EEF6;
-  border-radius:10px;
-  padding:8px 12px;
-}
-QLineEdit#searchBox:focus { border-color:#90CAF9; }
-
-/* Botón primario */
-QPushButton[type="primary"] {
-  background:#2979FF;
-  border:1px solid #2979FF;
-  color:#FFFFFF;
-  border-radius:10px;
-  padding:8px 12px;
-  qproperty-iconSize: 18px 18px;
-}
-QPushButton[type="primary"]:hover { background:#3b86ff; }
-
-/* TreeWidget / Header / Selección */
-QHeaderView::section {
-  background:#F8FAFF;
-  color:#0F172A;
-  padding:10px;
-  border:none;
-  border-right:1px solid #E8EEF6;
-}
-QTreeWidget {
-  selection-background-color: rgba(41,121,255,.15);
-  selection-color:#0F172A;
-  border:1px solid #E8EEF6;
-  border-radius:16px;
-}
-
-/* Evitar fondo gris en contenedores embebidos */
-QTreeWidget QWidget { background: transparent; border: none; }
-"""
+    return themed_icon(name)
 
 
 class _ResizeWatcher(QObject):
@@ -135,28 +64,21 @@ class _ParentResizeWatcher(QObject):
 
 
 def _style_action_button(btn: QPushButton, kind: str):
-    """
-    Aplica estilo sólido azul/rojo, icon-only, sin fondo gris del contenedor,
-    iconSize 18px, altura mínima 28px (igual que Productos).
-    """
-    if kind == "edit":
-        btn.setStyleSheet(
-            "QPushButton{background:#2979FF;border:1px solid #2979FF;color:#FFFFFF;border-radius:8px;padding:6px;}"
-            "QPushButton:hover{background:#3b86ff;}"
-        )
-        btn.setIcon(icon("edit"))
-        btn.setToolTip("Editar venta")
-    else:
-        btn.setStyleSheet(
-            "QPushButton{background:#EF5350;border:1px solid #EF5350;color:#FFFFFF;border-radius:8px;padding:6px;}"
-            "QPushButton:hover{background:#f26461;}"
-        )
-        btn.setIcon(icon("trash"))
-        btn.setToolTip("Eliminar venta")
-    btn.setText("")  # icon-only
+    """Aplica estilo tematizado a botones de acción."""
+    btn.setText("")
     btn.setCursor(Qt.PointingHandCursor)
     btn.setMinimumHeight(BTN_MIN_HEIGHT)
     btn.setIconSize(QSize(ICON_PX, ICON_PX))
+    btn.setProperty("type", "icon")
+    if kind == "edit":
+        btn.setProperty("variant", "edit")
+        btn.setIcon(icon("edit"))
+        btn.setToolTip("Editar venta")
+    else:
+        btn.setProperty("variant", "delete")
+        btn.setIcon(icon("trash"))
+        btn.setToolTip("Eliminar venta")
+    btn.style().unpolish(btn); btn.style().polish(btn)
 
 
 class Ui_Form(object):
@@ -201,7 +123,7 @@ class Ui_Form(object):
         hl.addWidget(self.btnExportar)
 
         self.btnNueva = QPushButton("Nueva venta", self.headerCard)
-        self.btnNueva.setObjectName("btnVentaNueva")        
+        self.btnNueva.setObjectName("btnVentaNueva")
         self.btnNueva.setProperty("type","primary")
         self.btnNueva.setProperty("perm_code", "ventas.create")
         self.btnNueva.setIcon(icon("plus"))
@@ -250,9 +172,8 @@ class Ui_Form(object):
         self._parentWatcher = _ParentResizeWatcher(self)
         Form.installEventFilter(self._parentWatcher)
 
-        # Estilos
+        # Estilos globales
         apply_global_styles(Form)
-        Form.setStyleSheet(QSS_WILLOW)
 
         self.retranslateUi(Form)
         QMetaObject.connectSlotsByName(Form)
@@ -266,7 +187,6 @@ class Ui_Form(object):
             ruta, _ = QFileDialog.getSaveFileName(None, "Guardar como", "Ventas.xlsx", "Excel (*.xlsx)")
             if not ruta:
                 return
-            # Igual que tu versión original (usa la función de QTable por compatibilidad)
             export_qtable_to_excel(self.treeWidget, ruta, title="Ventas")
             QMessageBox.information(None, "Éxito", "Exportación completada.")
         except Exception as e:
@@ -287,12 +207,12 @@ class Ui_Form(object):
         if not hasattr(self, 'formulario_nueva_venta'):
             return
         if self.formulario_nueva_venta.isVisible():
-            ancho_formulario = self.formulario_nueva_venta.width()
-            alto_formulario = Form.height()
+            w = self.formulario_nueva_venta.width()
+            h = Form.height()
             self.anim = QPropertyAnimation(self.formulario_nueva_venta, b"geometry")
             self.anim.setDuration(300)
-            self.anim.setStartValue(QRect(Form.width() - ancho_formulario, 0, ancho_formulario, alto_formulario))
-            self.anim.setEndValue(QRect(Form.width(), 0, ancho_formulario, alto_formulario))
+            self.anim.setStartValue(QRect(Form.width() - w, 0, w, h))
+            self.anim.setEndValue(QRect(Form.width(), 0, w, h))
             self.anim.finished.connect(self.formulario_nueva_venta.close)
             self.anim.start()
 
@@ -306,20 +226,18 @@ class Ui_Form(object):
 
         agregar_filas(self.ui_nueva_venta)
 
-        # Ancho/alto iniciales
-        ancho_formulario = min(SLIDE_WIDTH, max(280, Form.width()))
-        alto_formulario = Form.height()
-        # Posición inicial fuera de pantalla (derecha) para animar entrada
-        self.formulario_nueva_venta.setGeometry(Form.width(), 0, ancho_formulario, alto_formulario)
+        # Geometría inicial (slide-in)
+        w = min(SLIDE_WIDTH, max(280, Form.width()))
+        h = Form.height()
+        self.formulario_nueva_venta.setGeometry(Form.width(), 0, w, h)
         self.formulario_nueva_venta.show()
 
         self.anim = QPropertyAnimation(self.formulario_nueva_venta, b"geometry")
         self.anim.setDuration(300)
-        self.anim.setStartValue(QRect(Form.width(), 0, ancho_formulario, alto_formulario))
-        self.anim.setEndValue(QRect(Form.width() - ancho_formulario, 0, ancho_formulario, alto_formulario))
+        self.anim.setStartValue(QRect(Form.width(), 0, w, h))
+        self.anim.setEndValue(QRect(Form.width() - w, 0, w, h))
         self.anim.start()
 
-        # Sincroniza la geometría por si el usuario redimensiona durante/tras la animación
         QTimer.singleShot(0, self._sync_form_geometry)
         self.anim.finished.connect(self._sync_form_geometry)
 
@@ -327,8 +245,7 @@ class Ui_Form(object):
             conexion_db = conexion()
             cursor = conexion_db.cursor()
             cursor.execute("SELECT id, nombre FROM clientes;")
-            clientes = cursor.fetchall()
-            for idC, nombreC in clientes:
+            for idC, nombreC in cursor.fetchall():
                 self.ui_nueva_venta.comboBox.addItem(nombreC, idC)
             if self.ui_nueva_venta.comboBox.count() > 0:
                 self.ui_nueva_venta.comboBox.setCurrentIndex(0)
@@ -361,11 +278,9 @@ class Ui_Form(object):
         for col in (1,2,3,4,5,6):
             header.setSectionResizeMode(col, QHeaderView.Stretch)
         header.setSectionResizeMode(OPCIONES_COL, QHeaderView.ResizeToContents)
-        current_width = self.treeWidget.columnWidth(OPCIONES_COL)
-        if current_width < OPCIONES_MIN_WIDTH:
+        if self.treeWidget.columnWidth(OPCIONES_COL) < OPCIONES_MIN_WIDTH:
             self.treeWidget.setColumnWidth(OPCIONES_COL, OPCIONES_MIN_WIDTH)
 
-    # Centramos contenido en columnas visibles
     def _center_cells(self):
         def process_item(item):
             for col in (1,2,3,4,5,6):
@@ -375,12 +290,10 @@ class Ui_Form(object):
         for i in range(self.treeWidget.topLevelItemCount()):
             process_item(self.treeWidget.topLevelItem(i))
 
-    # Botones de Opciones: mismo color/tamaño (usa _style_action_button)
     def _colorize_option_buttons(self):
         def process_item(item):
             w = self.treeWidget.itemWidget(item, OPCIONES_COL)
             if w is not None:
-                # asegurar que el contenedor no pinte fondo gris
                 try:
                     w.setAutoFillBackground(False)
                     w.setAttribute(Qt.WA_StyledBackground, False)
@@ -409,7 +322,6 @@ class VentanaPrincipal(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        # Mantener pegado en caso de usarse QMainWindow como contenedor
         if hasattr(self.ui, 'formulario_nueva_venta') and self.ui.formulario_nueva_venta.isVisible():
             self.ui._sync_form_geometry()
 

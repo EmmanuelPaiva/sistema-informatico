@@ -9,7 +9,7 @@ class FormularioNuevaObra(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        self.setStyleSheet(self.estilos())
+        # Usa estilos globales (main/themes.py) según el modo claro/oscuro
 
         layout = QVBoxLayout(self)
         layout.setSpacing(15)
@@ -94,7 +94,10 @@ class FormularioNuevaObra(QWidget):
         self.btn_aceptar = QPushButton("Aceptar")
         self.btn_aceptar.setObjectName("btnAceptarObra")         # PATCH permisos
         self.btn_aceptar.setProperty("perm_code", "obras.create")
+        # Aplicar tipos para que tomen estilos del tema
+        self.btn_aceptar.setProperty("type", "primary")
         self.btn_cancelar = QPushButton("Cancelar")
+        self.btn_cancelar.setProperty("type", "secondary")
         botones_layout.addWidget(self.btn_cancelar)
         botones_layout.addStretch()
         botones_layout.addWidget(self.btn_aceptar)
@@ -149,37 +152,7 @@ class FormularioNuevaObra(QWidget):
         self.input_presupuesto.setValue(0.00)
         self.input_descripcion.clear()
 
-    def estilos(self):
-        return """
-        QWidget {
-            font-family: 'Segoe UI';
-            font-size: 11pt;
-            background-color: #f5f6fa;
-        }
-
-        QLineEdit, QDateEdit, QDoubleSpinBox, QTextEdit {
-            background-color: white;
-            border: 1px solid #dcdde1;
-            border-radius: 8px;
-            padding: 6px;
-            color: black;
-        }
-
-        QPushButton {
-            background-color: #0097e6;
-            color: white;
-            padding: 8px 20px;
-            border-radius: 6px;
-        }
-
-        QPushButton:hover {
-            background-color: #00a8ff;
-        }
-
-        QLabel {
-            color: #2f3640;
-        }
-        """
+    # Estilos propios eliminados para heredar del tema global
 
 # Ejemplo de prueba visual
 if __name__ == "__main__":

@@ -24,7 +24,10 @@ from forms.ui_helpers import (
     apply_global_styles, mark_title, make_primary, make_danger, style_table, style_search
 )
 
-OPCIONES_MIN_WIDTH = 140  # ancho mínimo para columna Opciones
+OPCIONES_MIN_WIDTH = 140
+BTN_MIN_HEIGHT = 28
+ICON_PX = 18
+  # ancho mínimo para columna Opciones
 
 
 # =================== Helper de íconos (Tabler) ===================
@@ -61,9 +64,11 @@ def _find_icon_path(name: str) -> Path | None:
     return None
 
 
+from main.themes import themed_icon
+
 def icon(name: str) -> QIcon:
-    p = _find_icon_path(name)
-    return QIcon(str(p)) if p else QIcon()
+    # Theme-aware icon (white in dark mode)
+    return themed_icon(name)
 
 
 # =================== ESTILOS (Willow base) ===================
@@ -154,31 +159,24 @@ class _ResizeWatcher(QObject):
 
 
 # ===== helper: estilo local (sobrescribe cualquier QSS global) =====
+
 def _style_action_button(btn: QPushButton, kind: str):
-    """
-    kind: 'edit' | 'delete'
-    Fuerza colores con stylesheet local para evitar que algún QSS global deje el botón transparente.
-    También los deja solo-ícono.
-    """
+    """Configura botones de acción usando variantes del tema."""
+    btn.setText("")
+    btn.setCursor(Qt.PointingHandCursor)
+    btn.setMinimumHeight(BTN_MIN_HEIGHT)
+    btn.setIconSize(QSize(ICON_PX, ICON_PX))
+    btn.setProperty("type", "icon")
     if kind == "edit":
-        btn.setStyleSheet(
-            "QPushButton{background:#2979FF;border:1px solid #2979FF;color:#FFFFFF;border-radius:8px;padding:6px;}"
-            "QPushButton:hover{background:#3b86ff;}"
-        )
+        btn.setProperty("variant", "edit")
         btn.setIcon(icon("edit"))
         btn.setToolTip("Editar producto")
-    else:  # delete
-        btn.setStyleSheet(
-            "QPushButton{background:#EF5350;border:1px solid #EF5350;color:#FFFFFF;border-radius:8px;padding:6px;}"
-            "QPushButton:hover{background:#f26461;}"
-        )
+    else:
+        btn.setProperty("variant", "delete")
         btn.setIcon(icon("trash"))
         btn.setToolTip("Eliminar producto")
+    btn.style().unpolish(btn); btn.style().polish(btn)
 
-    btn.setText("")  # icon-only
-    btn.setCursor(Qt.PointingHandCursor)
-    btn.setMinimumHeight(28)
-    btn.setIconSize(QSize(18, 18))
 
 
 class Ui_Form(object):
@@ -279,7 +277,7 @@ class Ui_Form(object):
 
         # ===== Estilos globales + Willow =====
         apply_global_styles(Form)
-        Form.setStyleSheet(QSS_RODLER)
+        # Styles are applied globally via main/themes
 
         self.retranslateUi(Form)
         QMetaObject.connectSlotsByName(Form)
@@ -687,7 +685,7 @@ class Ui_Form(object):
                 child.setStyleSheet("")
 
         apply_global_styles(container)
-        container.setStyleSheet(QSS_RODLER)
+        # Styles are applied globally via main/themes
 
         for btn in container.findChildren(QPushButton):
             txt = (btn.text() or "").lower()

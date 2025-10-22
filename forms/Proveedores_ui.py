@@ -48,10 +48,11 @@ def _desktop_dir() -> Path:
     d = home / "Desktop"
     return d if d.exists() else home
 
+from main.themes import themed_icon
+
 ICON_DIR = _desktop_dir() / "sistema-informatico" / "rodlerIcons"
 def icon(name: str) -> QIcon:
-    p = ICON_DIR / f"{name}.svg"
-    return QIcon(str(p)) if p.exists() else QIcon()
+    return themed_icon(name)
 
 # ------------- QSS Willow (idéntico a la base) -------------
 QSS_WILLOW = """
@@ -108,27 +109,24 @@ QTableWidget QWidget { background: transparent; border: none; }
 """
 
 # ---------- helper de estilo para acción (igual que Productos/Ventas) ----------
+
 def _style_action_button(btn: QPushButton, kind: str):
-    if kind == "edit":
-        # Azul sólido
-        btn.setStyleSheet(
-            "QPushButton{background:#2979FF;border:1px solid #2979FF;color:#FFFFFF;border-radius:8px;padding:6px;}"
-            "QPushButton:hover{background:#3b86ff;}"
-        )
-        btn.setIcon(icon("edit"))
-        btn.setToolTip("Editar proveedor")
-    else:
-        # Rojo sólido
-        btn.setStyleSheet(
-            "QPushButton{background:#EF5350;border:1px solid #EF5350;color:#FFFFFF;border-radius:8px;padding:6px;}"
-            "QPushButton:hover{background:#f26461;}"
-        )
-        btn.setIcon(icon("trash"))
-        btn.setToolTip("Eliminar proveedor")
-    btn.setText("")  # icon-only
+    """Configura botones de acción con tema actual."""
+    btn.setText("")
     btn.setCursor(Qt.PointingHandCursor)
     btn.setMinimumHeight(BTN_MIN_HEIGHT)
     btn.setIconSize(QSize(ICON_PX, ICON_PX))
+    btn.setProperty("type", "icon")
+    if kind == "edit":
+        btn.setProperty("variant", "edit")
+        btn.setIcon(icon("edit"))
+        btn.setToolTip("Editar proveedor")
+    else:
+        btn.setProperty("variant", "delete")
+        btn.setIcon(icon("trash"))
+        btn.setToolTip("Eliminar proveedor")
+    btn.style().unpolish(btn); btn.style().polish(btn)
+
 
 
 class Ui_Form(object):
@@ -218,7 +216,7 @@ class Ui_Form(object):
 
         # ---------- Estilos globales + Willow ----------
         apply_global_styles(Form)
-        Form.setStyleSheet(QSS_WILLOW)
+        # Styles are applied globally via main/themes
 
         self.retranslateUi(Form)
         QMetaObject.connectSlotsByName(Form)

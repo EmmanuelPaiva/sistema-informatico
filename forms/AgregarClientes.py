@@ -137,7 +137,7 @@ class Ui_Form(object):
         self.root.addWidget(self.card)
 
         # Estilos Willow
-        Form.setStyleSheet(QSS_WILLOW)
+        # Styles are applied globally via main/themes
 
         self.retranslateUi(Form)
         QMetaObject.connectSlotsByName(Form)
