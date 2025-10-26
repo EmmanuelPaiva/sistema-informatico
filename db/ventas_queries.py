@@ -159,11 +159,11 @@ def agregar_filas(ui_nueva_venta):
     _set_no_edit(item_subtotal, "0")
     ui_nueva_venta.tableWidget.setItem(row, 3, item_subtotal)
 
-    # Eventos (partial evita problemas de captura de fila)
+    # Eventos (absorbiendo argumentos extra de la señal)
     combo.currentIndexChanged.connect(partial(actualizar_subtotal, row, ui_nueva_venta))
     spin.valueChanged.connect(partial(actualizar_subtotal, row, ui_nueva_venta))
-    combo.currentIndexChanged.connect(lambda: calcular_total_general(ui_nueva_venta))
-    spin.valueChanged.connect(lambda: calcular_total_general(ui_nueva_venta))
+    combo.currentIndexChanged.connect(lambda *_: calcular_total_general(ui_nueva_venta))
+    spin.valueChanged.connect(lambda *_: calcular_total_general(ui_nueva_venta))
 
 
 # ==========================================
@@ -208,8 +208,8 @@ def agrega_prodcuto_a_fila(ui_nueva_venta):
 
     combo.currentIndexChanged.connect(partial(actualizar_subtotal, row, ui_nueva_venta))
     spin.valueChanged.connect(partial(actualizar_subtotal, row, ui_nueva_venta))
-    combo.currentIndexChanged.connect(lambda: calcular_total_general(ui_nueva_venta))
-    spin.valueChanged.connect(lambda: calcular_total_general(ui_nueva_venta))
+    combo.currentIndexChanged.connect(lambda *_: calcular_total_general(ui_nueva_venta))
+    spin.valueChanged.connect(lambda *_: calcular_total_general(ui_nueva_venta))
 
 
 # ==========================================
@@ -236,8 +236,7 @@ def cargar_ventas(ui, Form):
 
         # Preparar un único batch para detalles
         ids = [v[0] for v in ventas]
-        # Nota: ANY(%s) requiere adaptar lista. Psycopg maneja automáticamente con tu driver;
-        # si no, usa IN con formato dinámico. Aquí usamos ANY para mantenerlo simple y seguro.
+        # Nota: ANY(%s) requiere adaptar lista.
         cur.execute("""
             SELECT vd.id_venta, p.nombre, vd.cantidad, vd.precio_unitario, vd.subtotal
             FROM ventas_detalle vd
@@ -463,7 +462,11 @@ def cargar_detalles_venta(id_venta, ui):
 # ==========================================
 # Subtotales (SIN ir a DB por fila)
 # ==========================================
-def actualizar_subtotal(row, ui):
+def actualizar_subtotal(row, ui, *_):
+    """
+    Absorbe argumentos extra de señales (p.ej. índice del combo o valor del spin)
+    gracias al comodín *_ para evitar TypeError.
+    """
     try:
         combo = ui.tableWidget.cellWidget(row, 0)
         spin = ui.tableWidget.cellWidget(row, 1)

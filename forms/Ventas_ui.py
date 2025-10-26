@@ -5,13 +5,15 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from pathlib import Path
 from PySide6.QtCore import (
-    QCoreApplication, QMetaObject, QRect, Qt, QPropertyAnimation, QObject, QEvent, QSize, QTimer
+    QCoreApplication, QMetaObject, QRect, Qt, QPropertyAnimation, QObject, QEvent, QSize, QTimer,
+    QDate, QDateTime
 )
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QIcon, QFont
 from PySide6.QtWidgets import (
     QApplication, QGridLayout, QHeaderView, QLabel, QLineEdit, QPushButton,
     QTreeWidget, QWidget, QFileDialog, QMessageBox,
-    QSizePolicy, QFrame, QHBoxLayout, QVBoxLayout, QMainWindow
+    QSizePolicy, QFrame, QHBoxLayout, QVBoxLayout, QMainWindow, QListView,
+    QDateEdit, QDateTimeEdit
 )
 
 from forms.formularioVentas import Ui_Form as nuevaVentaUi
@@ -23,20 +25,18 @@ from db.ventas_queries import (
 from utils.utilsVentas import calcular_total_general, borrar_fila, toggle_subtabla
 from reports.excel import export_qtable_to_excel
 
-# Estilos/helpers existentes
 from forms.ui_helpers import (
     apply_global_styles, mark_title, make_primary, style_search
 )
 
 from main.themes import themed_icon
 
-# === Consistencia con tu módulo original ===
 OPCIONES_MIN_WIDTH = 140
 BTN_MIN_HEIGHT = 28
 ROW_HEIGHT = 46
 ICON_PX = 18
 OPCIONES_COL = 7
-SLIDE_WIDTH = 450  # ancho lógico del panel deslizante (igual que antes)
+SLIDE_WIDTH = 450
 
 def icon(name: str) -> QIcon:
     return themed_icon(name)
@@ -53,7 +53,6 @@ class _ResizeWatcher(QObject):
 
 
 class _ParentResizeWatcher(QObject):
-    """Mantiene pegado el panel deslizante a la derecha del Form al redimensionar."""
     def __init__(self, ui):
         super().__init__()
         self.ui = ui
@@ -64,7 +63,6 @@ class _ParentResizeWatcher(QObject):
 
 
 def _style_action_button(btn: QPushButton, kind: str):
-    """Aplica estilo tematizado a botones de acción."""
     btn.setText("")
     btn.setCursor(Qt.PointingHandCursor)
     btn.setMinimumHeight(BTN_MIN_HEIGHT)
@@ -100,8 +98,20 @@ class Ui_Form(object):
         hl = QHBoxLayout(self.headerCard); hl.setContentsMargins(16,12,16,12); hl.setSpacing(10)
 
         self.label = QLabel("Ventas", self.headerCard)
+        self.label.setObjectName("ventasTitle")
         self.label.setProperty("role", "pageTitle")
+        f = QFont(self.label.font())
+        f.setBold(False)
+        f.setPointSize(26)  # respaldo; el QSS manda
+        self.label.setFont(f)
         mark_title(self.label)
+        self.label.setStyleSheet("""
+            #ventasTitle {
+                font-size: 32px;
+                font-weight: 400;
+                text-transform: none;
+            }
+        """)
         hl.addWidget(self.label)
         hl.addStretch(1)
 
@@ -141,14 +151,25 @@ class Ui_Form(object):
         tv.addWidget(self.treeWidget)
         self.gridLayout.addWidget(self.tableCard, 1, 0, 1, 1)
 
-        # Config básica
         self.treeWidget.setColumnCount(8)
         self.treeWidget.setHeaderLabels(["ID", "Fecha", "Cliente", "Cantidad", "Total", "Medio", "Factura", "Opciones"])
-        self.treeWidget.setColumnHidden(0, True)  # ID siempre oculta
+        self.treeWidget.setColumnHidden(0, True)
         self.treeWidget.setRootIsDecorated(False)
         self.treeWidget.setUniformRowHeights(True)
         self.treeWidget.setIndentation(0)
-        self.treeWidget.setStyleSheet(f"QTreeWidget::item {{ height: {ROW_HEIGHT}px; }}")
+        self.treeWidget.setStyleSheet(
+            f"""
+            QTreeWidget::item {{
+                height: {ROW_HEIGHT}px;
+                border-bottom: 1px solid palette(mid);
+                margin-left: 24px;
+                margin-right: 24px;
+            }}
+            QTreeWidget::item:selected {{
+                border-bottom: 1px solid palette(mid);
+            }}
+            """
+        )
 
         header = self.treeWidget.header()
         header.setHighlightSections(False)
@@ -157,6 +178,9 @@ class Ui_Form(object):
         for col in (1,2,3,4,5,6):
             header.setSectionResizeMode(col, QHeaderView.Stretch)
         header.setSectionResizeMode(OPCIONES_COL, QHeaderView.ResizeToContents)
+
+        # Centrar header
+        self._center_header()
 
         # Señales
         self.treeWidget.itemClicked.connect(lambda item, col: toggle_subtabla(item))
@@ -174,6 +198,15 @@ class Ui_Form(object):
 
         # Estilos globales
         apply_global_styles(Form)
+        self.label.setStyleSheet("""
+            #ventasTitle {
+                font-size: 32px;
+                font-weight: 400;
+                text-transform: none;
+            }
+        """)
+        self.label.style().unpolish(self.label)
+        self.label.style().polish(self.label)
 
         self.retranslateUi(Form)
         QMetaObject.connectSlotsByName(Form)
@@ -193,8 +226,76 @@ class Ui_Form(object):
             QMessageBox.critical(None, "Error", f"No se pudo exportar:\n{e}")
 
     # ======= Helpers del slide-out =======
+    def _fix_combo_popup(self, combo):
+        try:
+            view = QListView(combo)
+            view.setUniformItemSizes(True)
+            view.setAlternatingRowColors(False)
+            view.setStyleSheet(
+                "QListView{"
+                " background: palette(base);"
+                " color: palette(text);"
+                " border: 1px solid palette(mid);"
+                " padding: 0; margin: 0;"
+                "}"
+                "QListView::item{ padding: 6px 8px; }"
+                "QListView::item:selected{"
+                " background: palette(highlight);"
+                " color: palette(highlighted-text);"
+                "}"
+            )
+            combo.setView(view)
+            combo.setStyleSheet(
+                "QComboBox{"
+                " background: palette(base);"
+                " color: palette(text);"
+                "}"
+                "QComboBox QAbstractItemView{"
+                " background: palette(base);"
+                " color: palette(text);"
+                "}"
+            )
+            combo.setFrame(True)
+        except Exception:
+            pass
+
+    def _style_form_cell_widgets(self, ui_form):
+        tw = getattr(ui_form, "tableWidget", None)
+        if tw is None:
+            return
+
+        vh = tw.verticalHeader()
+        vh.setDefaultSectionSize(40)
+        vh.setMinimumSectionSize(36)
+
+        for r in range(tw.rowCount()):
+            tw.setRowHeight(r, vh.defaultSectionSize())
+
+            combo = tw.cellWidget(r, 0)
+            if combo is not None:
+                combo.setContentsMargins(0, 0, 0, 0)
+                combo.setMinimumHeight(36)
+                self._fix_combo_popup(combo)
+
+            spin = tw.cellWidget(r, 1)
+            if spin is not None:
+                spin.setContentsMargins(0, 0, 0, 0)
+                spin.setMinimumHeight(36)
+                spin.setStyleSheet(
+                    "QAbstractSpinBox{ background: palette(base); color: palette(text); }"
+                )
+
+        prev = tw.styleSheet() or ""
+        tw.setStyleSheet(prev + "\nQTableWidget::item{ padding: 0; margin: 0; }\n")
+
+    def _inflate_form_table(self, ui_form):
+        tw = getattr(ui_form, "tableWidget", None)
+        if tw is None:
+            return
+        tw.setMinimumHeight(260)
+        self._style_form_cell_widgets(ui_form)
+
     def _sync_form_geometry(self):
-        """Mantiene pegado el formulario al borde derecho del contenedor al redimensionar."""
         if not hasattr(self, 'formulario_nueva_venta') or not self.formulario_nueva_venta.isVisible():
             return
         host_w = max(self._host.width(), 0)
@@ -224,9 +325,13 @@ class Ui_Form(object):
         self.formulario_nueva_venta = QWidget(Form)
         self.ui_nueva_venta.setupUi(self.formulario_nueva_venta)
 
+        self._inflate_form_table(self.ui_nueva_venta)
         agregar_filas(self.ui_nueva_venta)
+        self._inflate_form_table(self.ui_nueva_venta)
 
-        # Geometría inicial (slide-in)
+        # Fecha por defecto: hoy
+        self._set_today_default_date()
+
         w = min(SLIDE_WIDTH, max(280, Form.width()))
         h = Form.height()
         self.formulario_nueva_venta.setGeometry(Form.width(), 0, w, h)
@@ -239,6 +344,7 @@ class Ui_Form(object):
         self.anim.start()
 
         QTimer.singleShot(0, self._sync_form_geometry)
+        QTimer.singleShot(0, lambda: self._inflate_form_table(self.ui_nueva_venta))
         self.anim.finished.connect(self._sync_form_geometry)
 
         if not edicion:
@@ -258,9 +364,13 @@ class Ui_Form(object):
                 lambda: guardar_venta_en_db(self.ui_nueva_venta, self, Form)
             )
 
-        self.ui_nueva_venta.pushButtonAgregarProducto.clicked.connect(lambda: agrega_prodcuto_a_fila(self.ui_nueva_venta))
+        self.ui_nueva_venta.pushButtonAgregarProducto.clicked.connect(
+            lambda: (agrega_prodcuto_a_fila(self.ui_nueva_venta), self._inflate_form_table(self.ui_nueva_venta))
+        )
         self.ui_nueva_venta.pushButtonCancelar.clicked.connect(lambda: self.cancelar(Form))
-        self.ui_nueva_venta.pushButtonQuitarProducto.clicked.connect(lambda: borrar_fila(self.ui_nueva_venta))
+        self.ui_nueva_venta.pushButtonQuitarProducto.clicked.connect(
+            lambda: (borrar_fila(self.ui_nueva_venta), self._inflate_form_table(self.ui_nueva_venta))
+        )
 
     # ---------- Buscar + postprocesado ----------
     def _buscar_y_postprocesar(self, texto: str):
@@ -272,6 +382,7 @@ class Ui_Form(object):
         self.ajustar_columnas()
         self._center_cells()
         self._colorize_option_buttons()
+        self._center_header()
 
     def ajustar_columnas(self):
         header = self.treeWidget.header()
@@ -281,18 +392,35 @@ class Ui_Form(object):
         if self.treeWidget.columnWidth(OPCIONES_COL) < OPCIONES_MIN_WIDTH:
             self.treeWidget.setColumnWidth(OPCIONES_COL, OPCIONES_MIN_WIDTH)
 
+    def _center_header(self):
+        try:
+            self.treeWidget.header().setDefaultAlignment(Qt.AlignCenter)
+        except Exception:
+            pass
+        hi = self.treeWidget.headerItem()
+        for col in range(self.treeWidget.columnCount()):
+            hi.setTextAlignment(col, Qt.AlignCenter)
+
     def _center_cells(self):
-        def process_item(item):
+        def process_item(node):
             for col in (1,2,3,4,5,6):
-                item.setTextAlignment(col, Qt.AlignCenter)
-            for i in range(item.childCount()):
-                process_item(item.child(i))
+                node.setTextAlignment(col, Qt.AlignCenter)
+            for i in range(node.childCount()):
+                process_item(node.child(i))
         for i in range(self.treeWidget.topLevelItemCount()):
             process_item(self.treeWidget.topLevelItem(i))
+        for i in range(self.treeWidget.topLevelItemCount()):
+            node = self.treeWidget.topLevelItem(i)
+            w = self.treeWidget.itemWidget(node, OPCIONES_COL)
+            if w is not None:
+                lay = w.layout()
+                if lay:
+                    lay.setContentsMargins(0,0,0,0)
+                    lay.setAlignment(Qt.AlignCenter)
 
     def _colorize_option_buttons(self):
-        def process_item(item):
-            w = self.treeWidget.itemWidget(item, OPCIONES_COL)
+        def process_item(node):
+            w = self.treeWidget.itemWidget(node, OPCIONES_COL)
             if w is not None:
                 try:
                     w.setAutoFillBackground(False)
@@ -308,10 +436,38 @@ class Ui_Form(object):
                     elif "del" in txt or "elimin" in txt or "borrar" in txt:
                         _style_action_button(btn, "delete")
                     btn.style().unpolish(btn); btn.style().polish(btn)
-            for i in range(item.childCount()):
-                process_item(item.child(i))
+                lay = w.layout()
+                if lay:
+                    lay.setContentsMargins(0,0,0,0)
+                    lay.setAlignment(Qt.AlignCenter)
+            for i in range(node.childCount()):
+                process_item(node.child(i))
         for i in range(self.treeWidget.topLevelItemCount()):
             process_item(self.treeWidget.topLevelItem(i))
+
+    # ======= Fecha por defecto: hoy =======
+    def _set_today_default_date(self):
+        today = QDate.currentDate()
+        edits = self.formulario_nueva_venta.findChildren(QDateEdit)
+        if edits:
+            for e in edits:
+                e.setDate(today)
+            return
+        dt_edits = self.formulario_nueva_venta.findChildren(QDateTimeEdit)
+        if dt_edits:
+            for e in dt_edits:
+                try:
+                    e.setDate(today)
+                except Exception:
+                    e.setDateTime(QDateTime.currentDateTime())
+            return
+        lines = self.formulario_nueva_venta.findChildren(QLineEdit)
+        for le in lines:
+            name = (le.objectName() or "").lower()
+            ph   = (le.placeholderText() or "").lower()
+            if "fecha" in name or "fecha" in ph or "date" in name:
+                le.setText(today.toString("yyyy-MM-dd"))
+                return
 
 
 class VentanaPrincipal(QMainWindow):

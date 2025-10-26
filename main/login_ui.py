@@ -329,6 +329,8 @@ class Ui_MainWindow(object):
         self.pageLogin.installEventFilter(MainWindow)
         self.stack.currentChanged.connect(MainWindow._on_stack_changed)
 
+        
+
         QMetaObject.connectSlotsByName(MainWindow)
 
     def retranslateUi(self, MainWindow):
@@ -637,7 +639,6 @@ QPushButton#btnLogin {{
         self.ui.linePass.clear(); self.ui.lineIdent.clear()
         self._clear_errors()
         self.ui.lineIdent.setFocus()
-
         self._install_login_styles()
         self._apply_theme_decor()
         self._timer.start()

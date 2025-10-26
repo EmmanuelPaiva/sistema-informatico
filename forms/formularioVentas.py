@@ -165,7 +165,7 @@ class Ui_Form(object):
         self.tableWidget.setColumnCount(4)
         self.tableWidget.setHorizontalHeaderLabels(["Producto", "Cantidad", "Precio Unitario", "Subtotal"])
         self.tableWidget.verticalHeader().setVisible(False)
-        self.tableWidget.verticalHeader().setDefaultSectionSize(36)
+        self.tableWidget.verticalHeader().setDefaultSectionSize(52)
 
         header = self.tableWidget.horizontalHeader()
         header.setStretchLastSection(False)

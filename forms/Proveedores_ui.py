@@ -1,12 +1,9 @@
-# proveedores_willow.py  — reemplaza tu archivo de Proveedores por este
-
 import sys, os, platform
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from pathlib import Path
-
-from PySide6.QtCore import (Qt, QSize, QCoreApplication, QMetaObject)
-from PySide6.QtGui import QIcon
+from PySide6.QtCore import Qt, QSize, QCoreApplication, QMetaObject
+from PySide6.QtGui import QIcon, QFont
 from PySide6.QtWidgets import (
     QApplication, QWidget, QGridLayout, QFrame, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QSizePolicy, QTableWidget, QHeaderView,
@@ -19,7 +16,6 @@ from db.prov_queries import (
     editar_proveedor, obtener_proveedor_por_id
 )
 
-# ==== Estilos/helpers del sistema (compat) ====
 try:
     from ui_helpers import apply_global_styles, mark_title, make_primary, make_danger, style_table, style_search
 except ModuleNotFoundError:
@@ -33,7 +29,6 @@ OPCIONES_MIN_WIDTH = 140
 BTN_MIN_HEIGHT = 28
 ICON_PX = 18
 
-# ------------- Iconos (carpeta rodlerIcons en Escritorio/OneDrive) -------------
 def _desktop_dir() -> Path:
     home = Path.home()
     if platform.system().lower().startswith("win"):
@@ -54,64 +49,7 @@ ICON_DIR = _desktop_dir() / "sistema-informatico" / "rodlerIcons"
 def icon(name: str) -> QIcon:
     return themed_icon(name)
 
-# ------------- QSS Willow (idéntico a la base) -------------
-QSS_WILLOW = """
-* { font-family: "Segoe UI", Arial, sans-serif; color:#0F172A; font-size:13px; }
-QWidget { background:#F5F7FB; }
-QLabel { background: transparent; }
-
-/* Card blanca */
-#headerCard, #tableCard, QTableWidget {
-  background:#FFFFFF;
-  border:1px solid #E8EEF6;
-  border-radius:16px;
-}
-
-/* Título de página */
-QLabel[role="pageTitle"] { font-size:18px; font-weight:800; color:#0F172A; }
-
-/* Buscador */
-QLineEdit#searchBox {
-  background:#F1F5F9;
-  border:1px solid #E8EEF6;
-  border-radius:10px;
-  padding:8px 12px;
-}
-QLineEdit#searchBox:focus { border-color:#90CAF9; }
-
-/* Botón primario azul */
-QPushButton[type="primary"] {
-  background:#2979FF;
-  border:1px solid #2979FF;
-  color:#FFFFFF;
-  border-radius:10px;
-  padding:8px 12px;
-}
-QPushButton[type="primary"]:hover { background:#3b86ff; }
-
-/* Tabla estilo Willow */
-QTableWidget {
-  gridline-color:#E8EEF6;
-  selection-background-color: rgba(41,121,255,.15);
-  selection-color:#0F172A;
-}
-QHeaderView::section {
-  background:#F8FAFF;
-  color:#0F172A;
-  padding:10px;
-  border:none;
-  border-right:1px solid #E8EEF6;
-}
-QTableWidget::item { padding:6px; }
-
-/* Evitar fondo gris en contenedores dentro de celdas */
-QTableWidget QWidget { background: transparent; border: none; }
-"""
-
-# ---------- helper de estilo para acción (igual que Productos/Ventas) ----------
-
 def _style_action_button(btn: QPushButton, kind: str):
-    """Configura botones de acción con tema actual."""
     btn.setText("")
     btn.setCursor(Qt.PointingHandCursor)
     btn.setMinimumHeight(BTN_MIN_HEIGHT)
@@ -127,27 +65,33 @@ def _style_action_button(btn: QPushButton, kind: str):
         btn.setToolTip("Eliminar proveedor")
     btn.style().unpolish(btn); btn.style().polish(btn)
 
-
-
 class Ui_Form(object):
     def setupUi(self, Form):
         if not Form.objectName():
             Form.setObjectName("Form")
         Form.resize(1000, 680)
-        # Keep a reference to the module form to allow permission re-apply
         self._form_main = Form
 
         self.grid = QGridLayout(Form)
         self.grid.setContentsMargins(12,12,12,12)
         self.grid.setSpacing(10)
 
-        # ---------- Header (título + buscador + botones) ----------
         self.headerCard = QFrame(Form); self.headerCard.setObjectName("headerCard")
         h = QHBoxLayout(self.headerCard); h.setContentsMargins(16,12,16,12); h.setSpacing(10)
 
         self.lblTitle = QLabel("Proveedores", self.headerCard)
+        self.lblTitle.setObjectName("proveedoresTitle")
         self.lblTitle.setProperty("role","pageTitle")
+        f = QFont(self.lblTitle.font()); f.setBold(False); f.setPointSize(26)
+        self.lblTitle.setFont(f)
         mark_title(self.lblTitle)
+        self.lblTitle.setStyleSheet("""
+            #proveedoresTitle {
+                font-size: 32px;
+                font-weight: 400;
+                text-transform: none;
+            }
+        """)
         h.addWidget(self.lblTitle)
 
         h.addStretch(1)
@@ -169,8 +113,8 @@ class Ui_Form(object):
         h.addWidget(self.btnExport)
 
         self.btnNuevo = QPushButton("Nuevo proveedor", self.headerCard)
-        self.btnNuevo.setObjectName("btnProveedorNuevo")                 # PATCH permisos
-        self.btnNuevo.setProperty("perm_code", "proveedores.create")  
+        self.btnNuevo.setObjectName("btnProveedorNuevo")
+        self.btnNuevo.setProperty("perm_code", "proveedores.create")
         self.btnNuevo.setProperty("type","primary")
         self.btnNuevo.setIcon(icon("plus"))
         self.btnNuevo.clicked.connect(lambda: self.abrir_formulario(Form))
@@ -179,7 +123,6 @@ class Ui_Form(object):
 
         self.grid.addWidget(self.headerCard, 0, 0, 1, 1)
 
-        # ---------- Tabla ----------
         self.tableCard = QFrame(Form); self.tableCard.setObjectName("tableCard")
         tv = QVBoxLayout(self.tableCard); tv.setContentsMargins(0,0,0,0)
 
@@ -191,18 +134,21 @@ class Ui_Form(object):
 
         header = self.table.horizontalHeader()
         header.setStretchLastSection(False)
-        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # ID (se oculta luego)
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(1, QHeaderView.Stretch)
         header.setSectionResizeMode(2, QHeaderView.Stretch)
         header.setSectionResizeMode(3, QHeaderView.Stretch)
         header.setSectionResizeMode(4, QHeaderView.Stretch)
         header.setSectionResizeMode(OPCIONES_COL, QHeaderView.ResizeToContents)
+        try:
+            header.setDefaultAlignment(Qt.AlignCenter)
+        except Exception:
+            pass
 
         style_table(self.table)
         tv.addWidget(self.table)
         self.grid.addWidget(self.tableCard, 1, 0, 1, 1)
 
-        # ---------- Data bindings ----------
         self.search.textChanged.connect(
             lambda text: buscar_proveedores(
                 text, self.table,
@@ -214,34 +160,35 @@ class Ui_Form(object):
         cargar_proveedores(self.table, edit_callback=self.abrir_formulario_editar, main_form_widget=Form)
         self._post_refresh_table()
 
-        # ---------- Estilos globales + Willow ----------
         apply_global_styles(Form)
-        # Styles are applied globally via main/themes
+        self.lblTitle.setStyleSheet("""
+            #proveedoresTitle {
+                font-size: 32px;
+                font-weight: 400;
+                text-transform: none;
+            }
+        """)
+        self.lblTitle.style().unpolish(self.lblTitle)
+        self.lblTitle.style().polish(self.lblTitle)
 
         self.retranslateUi(Form)
         QMetaObject.connectSlotsByName(Form)
 
-    # ————————— Post-refresco: ocultar ID + colorear botones —————————
     def _post_refresh_table(self):
-        # Ocultar SIEMPRE la columna ID
         try:
             if self.table.columnCount() > 0:
                 self.table.setColumnHidden(0, True)
         except Exception:
             pass
-
-        # Ajustar ancho de Opciones
         try:
             current_width = self.table.columnWidth(OPCIONES_COL)
             if current_width < OPCIONES_MIN_WIDTH:
                 self.table.setColumnWidth(OPCIONES_COL, OPCIONES_MIN_WIDTH)
         except Exception:
             pass
-
-        # Aplicar estilo a botones Editar/Eliminar
+        self._center_header()
+        self._center_cells()
         self._colorize_option_buttons()
-
-        # Reaplicar permisos del modulo si MenuPrincipal esta disponible
         try:
             form = getattr(self, '_form_main', None)
             if form is not None:
@@ -251,14 +198,34 @@ class Ui_Form(object):
         except Exception:
             pass
 
+    def _center_header(self):
+        try:
+            self.table.horizontalHeader().setDefaultAlignment(Qt.AlignCenter)
+        except Exception:
+            pass
+
+    def _center_cells(self):
+        rows = self.table.rowCount()
+        cols = self.table.columnCount()
+        for r in range(rows):
+            for c in range(1, cols-1):
+                it = self.table.item(r, c)
+                if it is not None:
+                    it.setTextAlignment(Qt.AlignCenter)
+        for r in range(rows):
+            cell = self.table.cellWidget(r, OPCIONES_COL)
+            if cell:
+                lay = cell.layout()
+                if lay:
+                    lay.setContentsMargins(0,0,0,0)
+                    lay.setAlignment(Qt.AlignCenter)
+
     def _colorize_option_buttons(self):
         rows = self.table.rowCount()
         for r in range(rows):
             cell = self.table.cellWidget(r, OPCIONES_COL)
             if not cell:
                 continue
-
-            # Contenedor sin fondo/sombra
             try:
                 cell.setAutoFillBackground(False)
                 cell.setAttribute(Qt.WA_StyledBackground, False)
@@ -266,17 +233,14 @@ class Ui_Form(object):
                 cell.setStyleSheet("background: transparent; border: none;")
             except Exception:
                 pass
-
             for btn in cell.findChildren(QPushButton):
                 txt = (btn.text() or "").lower()
                 if "edit" in txt or "editar" in txt:
                     _style_action_button(btn, "edit")
                 elif "del" in txt or "elimin" in txt or "borrar" in txt:
                     _style_action_button(btn, "del")
-                # refrescar estilo
                 btn.style().unpolish(btn); btn.style().polish(btn)
 
-    # ————————— Exportar —————————
     def exportar_excel_proveedores(self):
         try:
             ruta, _ = QFileDialog.getSaveFileName(None, "Guardar como", "Proveedores.xlsx", "Excel (*.xlsx)")
@@ -287,7 +251,6 @@ class Ui_Form(object):
         except Exception as e:
             QMessageBox.critical(None, "Error", f"No se pudo exportar:\n{e}")
 
-    # ————————— Formularios (con tu misma lógica) —————————
     def cancelar(self, Form):
         if hasattr(self, 'formularioProveedor') and self.formularioProveedor.isVisible():
             self.formularioProveedor.close()
@@ -310,18 +273,14 @@ class Ui_Form(object):
         self.ui_nuevo_proveedor.setupUi(self.formularioProveedor)
         self.formularioProveedor.setParent(Form)
         self.formularioProveedor.show()
-
         try:
             self.grid.removeWidget(self.headerCard)
             self.grid.removeWidget(self.tableCard)
         except Exception:
             pass
-
         self.grid.addWidget(self.headerCard, 1, 0, 1, 1)
         self.grid.addWidget(self.formularioProveedor, 0, 0, 1, 1)
         self.grid.addWidget(self.tableCard, 2, 0, 1, 1)
-
-        # Conectar botones del formulario
         self.ui_nuevo_proveedor.pushButtonCancelar.clicked.connect(lambda: self.cancelar(Form))
         self.ui_nuevo_proveedor.pushButton.clicked.connect(
             lambda: guardar_registro(self.ui_nuevo_proveedor, self.formularioProveedor,
@@ -331,24 +290,19 @@ class Ui_Form(object):
     def abrir_formulario_editar(self, Form, id_proveedor):
         if hasattr(self, 'formularioProveedor') and self.formularioProveedor.isVisible():
             self.formularioProveedor.close()
-
         self.ui_nuevo_proveedor = FormularioProv()
         self.formularioProveedor = QWidget()
         self.ui_nuevo_proveedor.setupUi(self.formularioProveedor)
         self.formularioProveedor.setParent(Form)
         self.formularioProveedor.show()
-
         try:
             self.grid.removeWidget(self.headerCard)
             self.grid.removeWidget(self.tableCard)
         except Exception:
             pass
-
         self.grid.addWidget(self.headerCard, 1, 0, 1, 1)
         self.grid.addWidget(self.formularioProveedor, 0, 0, 1, 1)
         self.grid.addWidget(self.tableCard, 2, 0, 1, 1)
-
-        # Precarga de datos
         prov = obtener_proveedor_por_id(id_proveedor)
         if prov:
             _, nombre, tel, dire, mail = prov
@@ -356,7 +310,6 @@ class Ui_Form(object):
             self.ui_nuevo_proveedor.lineEditTelefono.setText(str(tel))
             self.ui_nuevo_proveedor.lineEditDireccion.setText(dire)
             self.ui_nuevo_proveedor.lineEditCorreo.setText(mail)
-
         self.ui_nuevo_proveedor.pushButtonCancelar.clicked.connect(lambda: self.cancelar(Form))
         self.ui_nuevo_proveedor.pushButton.clicked.connect(
             lambda: editar_proveedor(self.ui_nuevo_proveedor, self.table, id_proveedor,
@@ -365,7 +318,6 @@ class Ui_Form(object):
 
     def retranslateUi(self, Form):
         Form.setWindowTitle(QCoreApplication.translate("Form", "Proveedores"))
-
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

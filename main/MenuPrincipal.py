@@ -47,15 +47,13 @@ from forms.weather_panel import DashboardWeatherPanel
 # =========================
 #   OPTIMIZACIONES CLAVE
 # =========================
-# 1) Engine singleton en memoria (evita reconstruir pools de conexión)
 _ENGINE_SINGLETON = None
 def _get_engine_cached():
     global _ENGINE_SINGLETON
     if _ENGINE_SINGLETON is None:
-        _ENGINE_SINGLETON = get_engine()  # ya viene con pool_pre_ping en tu graficos_dashboard
+        _ENGINE_SINGLETON = get_engine()
     return _ENGINE_SINGLETON
 
-# 2) SQL precompilado (evita parse en cada refresh)
 _SQL_MONTH_BOUNDS = text("""
     SELECT date_trunc('month', CURRENT_DATE)::date AS ini,
            (date_trunc('month', CURRENT_DATE) + interval '1 month')::date AS fin
@@ -91,7 +89,8 @@ _SQL_KPI_CRITICOS = text("""
 
 # ---------------- Iconos ----------------
 _THIS_DIR = os.path.dirname(__file__)
-_REL_ICONS = os.path.normpath(os.path.join(_THIS_DIR, "..", "rodelrIcons"))
+# FIX: nombre correcto de carpeta relativa de íconos
+_REL_ICONS = os.path.normpath(os.path.join(_THIS_DIR, "..", "rodlerIcons"))
 ABS_FALLBACK = r"C:\Users\mauri\OneDrive\Desktop\sistema-informatico\rodlerIcons"
 ICONS_BASE = _REL_ICONS if os.path.isdir(_REL_ICONS) else ABS_FALLBACK
 
@@ -229,9 +228,8 @@ def _resolver_user_fields(session: dict) -> tuple[str, str]:
     return display, role
 
 
-# ======================= Async helpers (sin QFutureWatcher) =======================
 class _FuncWorker(QObject):
-    finished = Signal(object, object)  # (result, error)
+    finished = Signal(object, object)  
 
     def __init__(self, fn, *args, **kwargs):
         super().__init__()
@@ -297,14 +295,40 @@ class KpiTile(QFrame):
         self.note.setStyleSheet(f"font-family:{fam}; font-size:13px; font-weight:400; color:{c_note};")
 
 
+_CHART_WRAPPER_MIN_H = 240
+_CHART_CANVAS_MIN_H = 220
+_CHART_MAX_H = 520
+_CHART_CANVAS_MARGIN = 24
+
+
+def _reset_figure_geometry(fig):
+    """Restore the original inch size saved on the Matplotlib figure to avoid cumulative growth."""
+    if fig is None:
+        return
+    try:
+        base = getattr(fig, "_rodler_base_inches", None)
+        if base is None:
+            setattr(fig, "_rodler_base_inches", tuple(fig.get_size_inches()))
+        else:
+            fig.set_size_inches(base, forward=False)
+    except Exception:
+        pass
+
+
 class ChartCard(QFrame):
     def __init__(self, title:str, parent=None):
         super().__init__(parent); self.setObjectName("tarjetaDashboard")
+        # Compacto pero flexible: ocupa el alto disponible cuando hay espacio extra
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.setMinimumHeight(_CHART_WRAPPER_MIN_H)
+        self.setMaximumHeight(_CHART_MAX_H)
+
         lay = QVBoxLayout(self); lay.setContentsMargins(16,16,16,16); lay.setSpacing(8)
         self.lbl = QLabel(title); self.lbl.setProperty("role","cardtitle"); self.lbl.setStyleSheet("background: transparent;")
         lay.addWidget(self.lbl)
         self.container = QWidget(self); self.container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.container.setMinimumHeight(_CHART_CANVAS_MIN_H)
+        self.container.setMaximumHeight(_CHART_MAX_H)
         cl = QVBoxLayout(self.container); cl.setContentsMargins(0,0,0,0); cl.setSpacing(0)
         lay.addWidget(self.container, 1)
         self.canvas = None
@@ -316,10 +340,15 @@ class ChartCard(QFrame):
         while lc.count():
             item = lc.takeAt(0)
             if item.widget(): item.widget().deleteLater()
+        _reset_figure_geometry(fig)
         self.canvas = FigureCanvas(fig)
+        # Permite que el grafico crezca sin superar el maximo fijado para la tarjeta
         self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.canvas.setMinimumHeight(_CHART_CANVAS_MIN_H)
+        self.canvas.setMaximumHeight(_CHART_MAX_H - _CHART_CANVAS_MARGIN)
         lc.addWidget(self.canvas)
         self.restyle()
+        self._redraw()
 
     def restyle(self):
         if self.canvas:
@@ -341,7 +370,10 @@ class ChartCarousel(QFrame):
     def __init__(self, title: str, parent=None, autorotate_ms: int = 7000):
         super().__init__(parent)
         self.setObjectName("tarjetaDashboard")
+        # Igual que ChartCard
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.setMinimumHeight(_CHART_WRAPPER_MIN_H)
+        self.setMaximumHeight(_CHART_MAX_H)
 
         root = QVBoxLayout(self); root.setContentsMargins(16, 16, 16, 16); root.setSpacing(8)
         header = QHBoxLayout()
@@ -355,6 +387,8 @@ class ChartCarousel(QFrame):
         if not (title or "").strip(): self.lbl.hide()
 
         self.stack = QStackedWidget(self); self.stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.stack.setMinimumHeight(_CHART_CANVAS_MIN_H)
+        self.stack.setMaximumHeight(_CHART_MAX_H)
         root.addWidget(self.stack, 1)
 
         self.dots = QLabel(); self.dots.setAlignment(Qt.AlignCenter); root.addWidget(self.dots)
@@ -377,8 +411,14 @@ class ChartCarousel(QFrame):
             widget = self.stack.widget(0); self.stack.removeWidget(widget); widget.deleteLater()
         for fig in figures:
             wrapper = QWidget(); wrapper.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            wrapper.setMinimumHeight(_CHART_CANVAS_MIN_H)
+            wrapper.setMaximumHeight(_CHART_MAX_H)
             layout = QVBoxLayout(wrapper); layout.setContentsMargins(0, 0, 0, 0); layout.setSpacing(0)
-            canvas = FigureCanvas(fig); canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            _reset_figure_geometry(fig)
+            canvas = FigureCanvas(fig)
+            canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            canvas.setMinimumHeight(_CHART_CANVAS_MIN_H)
+            canvas.setMaximumHeight(_CHART_MAX_H - _CHART_CANVAS_MARGIN)
             layout.addWidget(canvas)
             self.stack.addWidget(wrapper)
         self._update_dots(); self._redraw_current(); self.restyle()
@@ -527,7 +567,6 @@ class MenuPrincipal(QWidget):
     themeToggled = Signal(bool)
     deleteAccountRequested = Signal()
 
-    # ======== QDialog centrado ========
     class _CenterOverlay(QDialog):
         def __init__(self, parent, content: QWidget,
                      min_size=(520, 380), max_size=(760, 620),
@@ -656,12 +695,16 @@ class MenuPrincipal(QWidget):
         self._fig_cache = None  # list[Figure] | None
         self._fig_cache_ready = False
 
-        # threads y job-ids para “cancelar” tareas previas
+        # threads y job-ids
         self._threads: dict[str, dict] = {}
-        self._job_seq = {"kpis": 0, "figs": 0}
+        self._job_seq = {"kpis": 0}
 
-        # estado de cierre para ignorar callbacks tardíos
+        # estado de cierre
         self._shutting_down = False
+
+        # loader incremental de figuras
+        self._fig_queue = []     # lista de callables que crean Figure
+        self._figs_built = []    # Figures ya creadas (progresivo)
 
         self._build_ui()
         self._ensure_overlay_host()
@@ -678,7 +721,7 @@ class MenuPrincipal(QWidget):
         self.themeToggled.connect(self._on_theme_toggled)
         self.deleteAccountRequested.connect(self._on_delete_account_requested)
 
-        # Inicio: lazy y paralelo con QThread (no bloquea)
+        # Inicio
         if self._user_can_dashboard():
             self._ensure_inicio_visible_widgets()
             self._refresh_inicio_data_async()
@@ -828,18 +871,22 @@ class MenuPrincipal(QWidget):
         kpis_wrap.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         dashboard.addWidget(kpis_wrap, 0, 0, 1, 3)
 
-        # Carrusel sin título
+        # === Gráficos (compactos y estables) ===
         self.carousel = ChartCarousel("", autorotate_ms=7000)
         dashboard.addWidget(self.carousel, 1, 0, 1, 2)
 
         self.card_right = ChartCard("Distribución de gastos por tipo")
         dashboard.addWidget(self.card_right, 1, 2, 1, 1)
 
+        # Distribución vertical: la fila 1 absorbe el extra
+        dashboard.setRowStretch(0, 0)   # KPIs
+        dashboard.setRowStretch(1, 1)   # gráficos (crece, pero con altura máxima en tarjetas)
+        dashboard.setRowStretch(2, 0)   # clima
+
         self.weather = DashboardWeatherPanel(); self.weather.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         dashboard.addWidget(self.weather, 2, 0, 1, 3)
 
         dashboard.setColumnStretch(0, 2); dashboard.setColumnStretch(1, 2); dashboard.setColumnStretch(2, 1)
-        dashboard.setRowStretch(0, 0); dashboard.setRowStretch(1, 1); dashboard.setRowStretch(2, 0)
 
         self.stackedWidget.addWidget(self.paginaPrincipal)
         grid.addWidget(self.stackedWidget, 1, 1, 1, 1)
@@ -931,7 +978,7 @@ class MenuPrincipal(QWidget):
         self._overlayHost.show()
         self._overlayHost.raise_()
 
-    # ===== Helper para abrir el QDialog centrado (INFO y NUEVO USUARIO) =====
+    # ===== Helper para abrir el QDialog centrado =====
     def _show_center_overlay_dialog(self, content: QWidget, min_wh=(520,380), max_wh=(760,620)):
         dlg = self._CenterOverlay(self, content, min_size=min_wh, max_size=max_wh)
         dlg.exec()
@@ -1122,7 +1169,6 @@ class MenuPrincipal(QWidget):
 
     # -------------------- Logout & cierre seguro --------------------
     def _stop_all_threads(self, timeout_ms: int = 1500):
-        """Intenta parar todos los hilos en curso (KPIs, figuras, etc.)."""
         items = list((self._threads or {}).items())
         self._threads.clear()
         for name, rec in items:
@@ -1142,7 +1188,7 @@ class MenuPrincipal(QWidget):
             except Exception:
                 pass
 
-        # Detener posibles hilos/timers del clima
+        # detener posibles timers del clima
         try:
             w = getattr(self, "weather", None)
             for m in ("stop", "shutdown", "request_stop", "stop_threads"):
@@ -1220,9 +1266,14 @@ class MenuPrincipal(QWidget):
         if self._user_can_dashboard(): self._ensure_inicio_visible_widgets()
         else: self._blank_inicio()
 
+        # Modo permisivo si no hay permisos cargados (evita ocultar todo si falla la DB)
+        perms_loaded = bool((self.session or {}).get("perms"))
         for nombre, btn in self.menu_buttons.items():
             code = PERM_VIEW_BY_MODULE.get(nombre)
-            if code: btn.setVisible(_can(roles, perms, code))
+            if not code:
+                btn.setVisible(True)
+            else:
+                btn.setVisible(True if not perms_loaded else _can(roles, perms, code))
 
         if self.stackedWidget.currentWidget() is None:
             self.stackedWidget.setCurrentWidget(self.paginaPrincipal)
@@ -1255,10 +1306,17 @@ class MenuPrincipal(QWidget):
 
     # -------------------- permisos por módulo --------------------
     def _apply_permissions_to_module_page(self, nombre_modulo: str, pagina: QWidget):
+        if pagina is None:
+            return
+
         roles, perms = _session_roles_perms(self.session)
-        def _grey_disable(widget):
-            try: widget.setEnabled(False); widget.setStyleSheet(widget.styleSheet() + "; opacity: 0.6;")
-            except Exception: pass
+
+        def _grey_disable(w):
+            try:
+                w.setEnabled(False)
+                w.setStyleSheet(w.styleSheet() + "; opacity:0.6;")
+            except Exception:
+                pass
 
         actions = PERM_ACTIONS_BY_MODULE.get(nombre_modulo) or {}
         lacks = {
@@ -1267,26 +1325,35 @@ class MenuPrincipal(QWidget):
             "delete": not _can(roles, perms, actions.get("delete", "")),
         }
 
+        # 1) Por mapeo explícito de botones
         names_map = ACTION_BUTTONS_BY_MODULE.get(nombre_modulo, {})
         for kind, need in lacks.items():
-            if need:
-                for obj_name in names_map.get(kind, []):
-                    btn = pagina.findChild(QPushButton, obj_name)
-                    if btn: _grey_disable(btn)
+            if not need:
+                continue
+            for obj_name in names_map.get(kind, []):
+                btn = pagina.findChild(QPushButton, obj_name)
+                if btn:
+                    _grey_disable(btn)
 
+        # 2) Por propiedad 'perm_code' en botones
         for b in pagina.findChildren(QPushButton):
-            if not b.isEnabled(): continue
+            if not b.isEnabled():
+                continue
             perm_code = (b.property("perm_code") or "").strip()
-            if perm_code and not _can(roles, perms, perm_code): _grey_disable(b)
+            if perm_code and not _can(roles, perms, perm_code):
+                _grey_disable(b)
 
+        # 3) Heurística textual (fallback)
         for b in pagina.findChildren(QPushButton):
-            if not b.isEnabled(): continue
-            name = (b.objectName() or "").lower(); text = (b.text() or "").lower()
-            if lacks["create"] and (any(k in name for k in ("nuevo","crear","guardar","registrar")) or any(k in text for k in ("nuevo","crear","guardar","registrar"))):
+            if not b.isEnabled():
+                continue
+            name = (b.objectName() or "").lower()
+            text = (b.text() or "").lower()
+            if lacks["create"] and any(k in name or k in text for k in ("nuevo","crear","guardar","registrar")):
                 _grey_disable(b); continue
-            if lacks["update"] and (any(k in name for k in ("editar","modificar","actualizar")) or any(k in text for k in ("editar","modificar","actualizar"))):
+            if lacks["update"] and any(k in name or k in text for k in ("editar","modificar","actualizar")):
                 _grey_disable(b); continue
-            if lacks["delete"] and (any(k in name for k in ("eliminar","borrar","quitar","suprimir")) or any(k in text for k in ("eliminar","borrar","quitar","suprimir"))):
+            if lacks["delete"] and any(k in name or k in text for k in ("eliminar","borrar","quitar","suprimir")):
                 _grey_disable(b); continue
 
     # -------------------- sidebar --------------------
@@ -1340,16 +1407,14 @@ class MenuPrincipal(QWidget):
             self.stackedWidget.setCurrentWidget(self.paginaPrincipal)
             if self._user_can_dashboard():
                 self._ensure_inicio_visible_widgets()
-                # reusar cache si existe
                 if self._fig_cache_ready and self._fig_cache:
                     try:
                         self.carousel.set_figures(self._fig_cache[:-1])
                         self.card_right.set_figure(self._fig_cache[-1])
                     except Exception:
-                        # si algo falla al reusar cache, fuerza refresh
-                        self._refresh_inicio_data_async()
+                        self._start_build_figures_incrementally(force=True)
                 else:
-                    self._refresh_inicio_data_async()
+                    self._start_build_figures_incrementally(force=True)
             else:
                 self._blank_inicio()
             return
@@ -1394,7 +1459,6 @@ class MenuPrincipal(QWidget):
 
         def _finished(res, err):
             try:
-                # Acepta sólo el job vigente y si no estamos cerrando
                 if (jid == self._job_seq.get(name, 0)) and not getattr(self, "_shutting_down", False):
                     on_done(res, err, jid)
             finally:
@@ -1403,7 +1467,6 @@ class MenuPrincipal(QWidget):
                 except Exception:
                     pass
 
-        # Mantener referencias para poder detener después
         self._threads[name] = {"thread": th, "worker": worker, "jid": jid}
 
         worker.finished.connect(_finished)
@@ -1418,24 +1481,26 @@ class MenuPrincipal(QWidget):
         if getattr(self, "_shutting_down", False):
             return
 
-        """Lanza 2 tareas en paralelo: KPIs y Gráficos, sin bloquear el UI."""
         # 1) Placeholders
         self.kpi_ventas.set_value("Cargando…", "Total vendido")
         self.kpi_compras.set_value("Cargando…", "Total comprado")
         self.kpi_topprod.set_value("Cargando…", "")
         self.kpi_stock.set_value("—", "…")
 
-        # 2) KPIs
-        self._start_thread_job("kpis", self._compute_kpis,
-                               lambda res, err, jid: self._on_kpis_ready(res) if err is None else print("[Dashboard] KPI error:", err))
-        # 3) Figuras
-        self._start_thread_job("figs", self._compute_figures,
-                               lambda res, err, jid: self._on_figures_ready(res) if err is None else print("[Dashboard] Fig error:", err))
+        # 2) KPIs en segundo plano
+        self._start_thread_job(
+            "kpis",
+            self._compute_kpis,
+            lambda res, err, jid: self._on_kpis_ready(res) if err is None else print("[Dashboard] KPI error:", err)
+        )
+
+        # 3) Programar construcción incremental de gráficos en el hilo de GUI
+        self._start_build_figures_incrementally(force=True)
 
         # 4) Clima
         QTimer.singleShot(200, lambda: self.weather.refresh_default_city())
 
-    # --- Worker: KPIs (sólo números) ---
+    # --- KPIs en worker ---
     def _compute_kpis(self):
         eng = _get_engine_cached()
         ini, fin = None, None
@@ -1475,77 +1540,67 @@ class MenuPrincipal(QWidget):
         except Exception as e:
             print("[Dashboard] KPI render error:", e)
 
-    # --- Worker: Figuras (crea las Figure con tus funciones existentes) ---
-    def _compute_figures(self):
-        """
-        Genera las Figure en un hilo secundario, pero forzando backend 'Agg' para evitar
-        que Matplotlib intente inicializar GUI (Qt) fuera del hilo principal.
-        """
-        try:
-            # Forzar modo headless en este hilo
-            try:
-                import matplotlib
-                import matplotlib.pyplot as plt
-                # Si ya está otro backend (por ej. QtAgg), cambiarlo a Agg en este hilo
-                try:
-                    if (plt.get_backend() or "").lower() != "agg":
-                        plt.switch_backend("Agg")
-                except Exception:
-                    # fallback por si get_backend falla
-                    pass
-                try:
-                    plt.ioff()  # sin modo interactivo
-                except Exception:
-                    pass
-            except Exception:
-                # Si por algún motivo no podemos importar pyplot, igual intentamos crear figuras
-                pass
+    # --- Gráficos incremental en hilo de GUI (evita crash por Qt en hilos) ---
+    def _start_build_figures_incrementally(self, force: bool = False):
+        if getattr(self, "_shutting_down", False):
+            return
+        # si ya hay cache y no se fuerza, reusar
+        if (self._fig_cache_ready and self._fig_cache) and not force:
+            self.carousel.set_figures(self._fig_cache[:-1])
+            self.card_right.set_figure(self._fig_cache[-1])
+            return
 
-            # Ahora sí, crear las figuras con tus funciones existentes (retornan Figure)
-            figs = [
-                create_ventas_vs_compras_mensuales(meses=12),
-                create_gastos_mensuales(meses=12),
-                create_presupuesto_vs_gasto_por_obra(top_n=10),
-                create_top_materiales_mes(dias=30, limit=10),
-                create_stock_critico(limit=10),
-                # La tarjeta derecha:
-                create_distribucion_gastos_por_tipo(),
-            ]
+        # reiniciar cola y resultados
+        self._figs_built = []
+        self._fig_queue = [
+            lambda: create_ventas_vs_compras_mensuales(meses=12),
+            lambda: create_gastos_mensuales(meses=12),
+            lambda: create_presupuesto_vs_gasto_por_obra(top_n=10),
+            lambda: create_top_materiales_mes(dias=30, limit=10),
+            lambda: create_stock_critico(limit=10),
+            # derecha:
+            lambda: create_distribucion_gastos_por_tipo(),
+        ]
+        # arrancar
+        QTimer.singleShot(0, self._build_next_figure)
 
-            # Seguridad extra: asegurarnos que lo que devolvemos son Figure "puras" (sin canvas Qt)
-            # Muchas veces lo son, pero si alguna función devolviera un canvas, lo convertimos a Figure.
-            cleaned = []
-            for f in figs:
-                try:
-                    # Si f es un canvas, tomar su .figure
-                    if hasattr(f, "figure") and getattr(f, "__class__", None).__name__.lower().startswith("figurecanvas"):
-                        f = f.figure
-                except Exception:
-                    pass
-                cleaned.append(f)
-
-            return cleaned
-
-        except Exception as e:
-            print("[Dashboard] Error generando figuras:", e)
-            return []
-
-
-    def _on_figures_ready(self, figs):
+    def _build_next_figure(self):
         if getattr(self, "_shutting_down", False) or not self.isVisible():
             return
-        if not figs:
+        if not self._fig_queue:
+            # Terminado: cache y montar
+            if self._figs_built:
+                self._fig_cache = self._figs_built[:]
+                self._fig_cache_ready = True
+                try:
+                    self.carousel.set_figures(self._fig_cache[:-1])
+                    self.card_right.set_figure(self._fig_cache[-1])
+                except Exception as e:
+                    print("[Dashboard] Error al montar figuras (final):", e)
             return
-        try:
-            # Cachea para reusar si vuelven a "Inicio"
-            self._fig_cache = figs[:]  # copia
-            self._fig_cache_ready = True
 
-            # Los 5 primeros van al carrusel, el último a la tarjeta derecha
-            self.carousel.set_figures(figs[:-1])
-            self.card_right.set_figure(figs[-1])
+        # tomar siguiente creador y construir en GUI
+        fn = self._fig_queue.pop(0)
+        try:
+            fig = fn()
+            if fig is not None:
+                self._figs_built.append(fig)
+
+                # montaje progresivo: mostrar lo que ya hay
+                if len(self._figs_built) >= 1:
+                    try:
+                        carr = self._figs_built[:-1] if len(self._figs_built) < 6 else self._figs_built[:-1]
+                        if carr:
+                            self.carousel.set_figures(carr)
+                        if len(self._figs_built) == 6:
+                            self.card_right.set_figure(self._figs_built[-1])
+                    except Exception as e:
+                        print("[Dashboard] Error al montar figuras (parcial):", e)
         except Exception as e:
-            print("[Dashboard] Error al montar figuras:", e)
+            print("[Dashboard] Error generando figura:", e)
+
+        # continuar con la siguiente en la cola
+        QTimer.singleShot(0, self._build_next_figure)
 
 
 if __name__ == "__main__":

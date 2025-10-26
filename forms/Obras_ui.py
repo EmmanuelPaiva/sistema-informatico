@@ -33,11 +33,9 @@ def icon(name: str) -> QIcon:
 
 
 def _to_qdate(v) -> QDate:
-    """Convierte date/datetime/str a QDate válido; fallback: hoy."""
     if isinstance(v, QDate):
         return v if v.isValid() else QDate.currentDate()
     try:
-        # date/datetime de Python
         if hasattr(v, "year") and hasattr(v, "month") and hasattr(v, "day"):
             return QDate(v.year, v.month, v.day)
     except Exception:
@@ -55,17 +53,24 @@ class ObrasWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.id_obra_en_edicion = None
-        self.cards = []  # [(frame, data_dict, es_nueva_obra)]
+        self.cards = []
 
-        # ===== Layout raíz
         root = QVBoxLayout(self); root.setContentsMargins(12, 12, 12, 12); root.setSpacing(12)
 
-        # ===== Header
         self.headerCard = QFrame(self); self.headerCard.setObjectName("headerCard")
         hl = QHBoxLayout(self.headerCard); hl.setContentsMargins(16, 12, 16, 12); hl.setSpacing(10)
 
-        self.label_titulo = QLabel("Obras"); self.label_titulo.setProperty("role", "pageTitle")
+        self.label_titulo = QLabel("Obras"); 
+        self.label_titulo.setObjectName("obrasTitle")
+        self.label_titulo.setProperty("role", "pageTitle")
         mark_title(self.label_titulo)
+        self.label_titulo.setStyleSheet("""
+            #obrasTitle {
+                font-size: 32px;
+                font-weight: 400;
+                text-transform: none;
+            }
+        """)
 
         self.search = QLineEdit(self.headerCard)
         self.search.setObjectName("searchBox")
@@ -90,11 +95,9 @@ class ObrasWidget(QWidget):
         hl.addWidget(self.search, 1); hl.addWidget(self.btnExport); hl.addWidget(self.btnNueva)
         root.addWidget(self.headerCard)
 
-        # ===== Centro con páginas
         self.center = QFrame(self); root.addWidget(self.center, 1)
         self.stack = QStackedLayout(self.center); self.stack.setContentsMargins(0, 0, 0, 0); self.stack.setSpacing(12)
 
-        # --- Página 0: Listado
         self.page_list = QFrame()
         pl = QVBoxLayout(self.page_list); pl.setContentsMargins(0,0,0,0); pl.setSpacing(0)
         self.scroll = QScrollArea(); self.scroll.setWidgetResizable(True); self.scroll.setFrameShape(QFrame.NoFrame)
@@ -104,7 +107,6 @@ class ObrasWidget(QWidget):
         pl.addWidget(self.scroll)
         self.stack.addWidget(self.page_list)
 
-        # --- Página 1: Detalles
         self.page_det = QFrame()
         pd = QVBoxLayout(self.page_det); pd.setContentsMargins(0,0,0,0); pd.setSpacing(0)
         self.det_container = QFrame()
@@ -112,14 +114,12 @@ class ObrasWidget(QWidget):
         pd.addWidget(self.det_container, 1)
         self.stack.addWidget(self.page_det)
 
-        # --- Página 2: Formulario
         self.page_form = QFrame()
         pf = QVBoxLayout(self.page_form); pf.setContentsMargins(0,0,0,0)
         self.form = FormularioNuevaObra(self.page_form)
         pf.addWidget(self.form, 1)
         self.stack.addWidget(self.page_form)
 
-        # Conexiones
         try:
             self.form.btn_cancelar.clicked.disconnect()
         except Exception:
@@ -134,14 +134,20 @@ class ObrasWidget(QWidget):
 
         self.search.textChanged.connect(self._filtrar_cards)
 
-        # Estilos
         apply_global_styles(self)
+        self.label_titulo.setStyleSheet("""
+            #obrasTitle {
+                font-size: 32px;
+                font-weight: 400;
+                text-transform: none;
+            }
+        """)
+        self.label_titulo.style().unpolish(self.label_titulo)
+        self.label_titulo.style().polish(self.label_titulo)
 
-        # Carga inicial
         QTimer.singleShot(0, self._reflow)
         self.cargar_obras()
 
-    # ===================== Exportar =====================
     def _exportar_excel_click(self):
         ruta, _ = QFileDialog.getSaveFileName(self, "Guardar como", "Obras.xlsx", "Excel (*.xlsx)")
         if not ruta: return
@@ -151,7 +157,6 @@ class ObrasWidget(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Error al exportar", f"No se pudo exportar:\n{e}")
 
-    # ===================== CRUD =====================
     def procesar_formulario_obra(self):
         datos = self.form.obtener_datos()
         if not datos:
@@ -224,9 +229,7 @@ class ObrasWidget(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo cerrar:\n{e}")
 
-    # ===================== Carga/Refresco =====================
     def cargar_obras(self):
-        """Orden por fecha_inicio DESC (aprovecha idx_obras_fecha_inicio_desc_inc si lo creaste)."""
         self.cards.clear()
         try:
             with conexion() as c, c.cursor() as cur:
@@ -258,7 +261,6 @@ class ObrasWidget(QWidget):
         self._reflow()
         self._filtrar_cards()
 
-    # ===================== Navegación =====================
     def _mostrar_detalles_inline(self, widget: QWidget):
         self.headerCard.setVisible(False)
         self._clear_layout(self.det_layout)
@@ -280,7 +282,6 @@ class ObrasWidget(QWidget):
         detalle = DetallesObraWidget(id_obra, parent=self)
         self._mostrar_detalles_inline(detalle)
 
-    # ===================== Cards =====================
     def _agregar_card(self, obra):
         card = QFrame(); card.setObjectName("card"); card.setProperty("class","card")
         card.setMinimumHeight(170); card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -336,12 +337,9 @@ class ObrasWidget(QWidget):
         self.grid.addWidget(add)
 
     def _abrir_nueva_obra(self):
-        """Abre el formulario garantizando que NO queden datos de otra obra."""
         self.id_obra_en_edicion = None
-        # Limpieza total (evita “nueva obra” con datos viejos)
         if hasattr(self.form, "limpiar_campos"):
             self.form.limpiar_campos()
-        # Si tu Form mantiene estados extra, forzamos defaults básicos:
         try:
             self.form.input_estado.setCurrentIndex(0)
         except Exception:
@@ -361,7 +359,6 @@ class ObrasWidget(QWidget):
 
         self.id_obra_en_edicion = id_obra
 
-        # Cargar valores con QDate correcto (evita estados inválidos)
         self.form.input_nombre.setText(datos[0] or "")
         self.form.input_direccion.setText(datos[1] or "")
         self.form.input_fecha_inicio.setDate(_to_qdate(datos[2]))
@@ -386,16 +383,13 @@ class ObrasWidget(QWidget):
         if self.eliminar_obra_de_bd(id_obra):
             self.refrescar_cards()
 
-    # ===================== Vistas =====================
     def mostrar_formulario_con_animacion(self):
         self.stack.setCurrentIndex(2)
 
     def ocultar_formulario_con_animacion(self):
         self.stack.setCurrentIndex(0)
-        # MUY IMPORTANTE: salir de edición para que el próximo “Nueva obra” no herede datos
         self.id_obra_en_edicion = None
 
-    # ===================== Flow/Resizing/Búsqueda =====================
     def resizeEvent(self, event):
         super().resizeEvent(event); self._reflow()
 
@@ -453,7 +447,6 @@ class ObrasWidget(QWidget):
             ordered.append(add_frame)
         self._reordenar(ordered)
 
-    # ===================== Helpers internos =====================
     @staticmethod
     def _clear_layout(layout):
         while layout.count():
