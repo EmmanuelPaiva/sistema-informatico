@@ -78,6 +78,9 @@ def actualizar_subtotal(row, ui, *__):
     except Exception as e:
         print(f"[actualizar_subtotal] Error fila {row}: {e}")
 
+def _actualizar_tooltip_producto(combo):
+    texto = combo.currentText()
+    combo.setToolTip(texto)
 
 # ---------- AGREGAR UNA FILA ----------
 def agrega_prodcuto_a_fila(ui_nueva_compra):
@@ -86,7 +89,9 @@ def agrega_prodcuto_a_fila(ui_nueva_compra):
 
     combo = QComboBox()
     ui_nueva_compra.tableWidget.setCellWidget(row, 0, combo)
-
+    combo.currentIndexChanged.connect(
+        lambda *_: _actualizar_tooltip_producto(combo)
+    )
     # productos por proveedor (cacheados)
     id_proveedor = ui_nueva_compra.comboBox.currentData()
     if id_proveedor is None:

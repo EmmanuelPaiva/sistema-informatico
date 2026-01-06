@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
 from forms.formularioVentas import Ui_Form as nuevaCompraUi
 from db.conexion import conexion
 from db.compras_queries import (
-    agrega_prodcuto_a_fila, reiniciar_tabla_productos, SaveSellIntoDb, setRowsTreeWidget,
+    _ensure_producto_cache, agrega_prodcuto_a_fila, reiniciar_tabla_productos, SaveSellIntoDb, setRowsTreeWidget,
     on_proveedor_selected
 )
 from utils.utilsCompras import borrar_fila
@@ -304,21 +304,34 @@ class Ui_Form(object):
                 with conexion() as c, c.cursor() as cur:
                     cur.execute("SELECT id_proveedor, nombre FROM proveedores ORDER BY nombre;")
                     proveedores = cur.fetchall()
+
                 self.ui_nueva_compra.comboBox.clear()
                 for idP, nombreP in proveedores:
                     self.ui_nueva_compra.comboBox.addItem(nombreP, idP)
+
                 if self.ui_nueva_compra.comboBox.count() > 0:
                     self.ui_nueva_compra.comboBox.setCurrentIndex(0)
+
+                # 🔹 Inicializar proveedor activo
+                proveedor_id = self.ui_nueva_compra.comboBox.currentData()
+                if proveedor_id is not None:
+                    _ensure_producto_cache(self.ui_nueva_compra, proveedor_id)
+                    on_proveedor_selected(self.ui_nueva_compra)
+
+                # 🔹 Conectar señales (una sola vez)
                 self.ui_nueva_compra.comboBox.currentIndexChanged.connect(
-                    lambda: (reiniciar_tabla_productos(self.ui_nueva_compra), self._inflate_form_table(self.ui_nueva_compra))
+                    lambda: (
+                        reiniciar_tabla_productos(self.ui_nueva_compra),
+                        on_proveedor_selected(self.ui_nueva_compra),
+                        self._inflate_form_table(self.ui_nueva_compra)
+                    )
                 )
-                self.ui_nueva_compra.comboBox.currentIndexChanged.connect(
-                    lambda: (on_proveedor_selected(self.ui_nueva_compra), self._inflate_form_table(self.ui_nueva_compra))
-                )
-                on_proveedor_selected(self.ui_nueva_compra)
+
                 self._inflate_form_table(self.ui_nueva_compra)
+
             except Exception as e:
                 print(f"Error cargando proveedores: {e}")
+                
         self.ui_nueva_compra.pushButtonCancelar.clicked.connect(lambda: self.cancelar(Form))
         self.ui_nueva_compra.pushButtonAgregarProducto.clicked.connect(
             lambda: (agrega_prodcuto_a_fila(self.ui_nueva_compra), self._inflate_form_table(self.ui_nueva_compra))
