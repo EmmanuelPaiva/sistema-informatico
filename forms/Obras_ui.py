@@ -1,4 +1,4 @@
-# obras_willow.py — versión optimizada y con fixes de estado/fechas
+# obras_willow.py — versión optimizada y con fixes de espacio superior tras refresh
 import sys, os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -14,11 +14,18 @@ from db.conexion import conexion
 from forms.formulario_nueva_obra import FormularioNuevaObra
 from forms.detalles_obra import DetallesObraWidget
 from reports.excel import export_todas_obras_excel
+from utils.normNumbers import formatear_numero  
 
 try:
-    from ui_helpers import apply_global_styles, mark_title, style_search, make_primary, make_danger
+    from ui_helpers import (
+        apply_global_styles, mark_title, style_search, make_primary, make_danger,
+        style_edit_button, style_delete_button
+    )
 except ModuleNotFoundError:
-    from forms.ui_helpers import apply_global_styles, mark_title, style_search, make_primary, make_danger
+    from forms.ui_helpers import (
+        apply_global_styles, mark_title, style_search, make_primary, make_danger,
+        style_edit_button, style_delete_button
+    )
 
 try:
     import psycopg2
@@ -54,13 +61,14 @@ class ObrasWidget(QWidget):
         super().__init__(parent)
         self.id_obra_en_edicion = None
         self.cards = []
-
+        self.obras = []
         root = QVBoxLayout(self); root.setContentsMargins(12, 12, 12, 12); root.setSpacing(12)
+
 
         self.headerCard = QFrame(self); self.headerCard.setObjectName("headerCard")
         hl = QHBoxLayout(self.headerCard); hl.setContentsMargins(16, 12, 16, 12); hl.setSpacing(10)
 
-        self.label_titulo = QLabel("Obras"); 
+        self.label_titulo = QLabel("obras")
         self.label_titulo.setObjectName("obrasTitle")
         self.label_titulo.setProperty("role", "pageTitle")
         mark_title(self.label_titulo)
@@ -120,19 +128,13 @@ class ObrasWidget(QWidget):
         pf.addWidget(self.form, 1)
         self.stack.addWidget(self.page_form)
 
-        try:
-            self.form.btn_cancelar.clicked.disconnect()
-        except Exception:
-            pass
-        self.form.btn_cancelar.clicked.connect(self.ocultar_formulario_con_animacion)
-
-        try:
-            self.form.btn_aceptar.clicked.disconnect()
-        except Exception:
-            pass
-        self.form.btn_aceptar.clicked.connect(self.procesar_formulario_obra)
-
         self.search.textChanged.connect(self._filtrar_cards)
+
+        if hasattr(self.form, "btn_aceptar"):
+            self.form.btn_aceptar.clicked.connect(self.procesar_formulario_obra)
+
+        if hasattr(self.form, "btn_cancelar"):
+            self.form.btn_cancelar.clicked.connect(self.ocultar_formulario_con_animacion)
 
         apply_global_styles(self)
         self.label_titulo.setStyleSheet("""
@@ -145,9 +147,20 @@ class ObrasWidget(QWidget):
         self.label_titulo.style().unpolish(self.label_titulo)
         self.label_titulo.style().polish(self.label_titulo)
 
-        QTimer.singleShot(0, self._reflow)
         self.cargar_obras()
+        self._scroll_to_top(async_call=True)
 
+    # ---------- Utilidades de scroll / layout ----------
+    def _scroll_to_top(self, async_call: bool = False):
+        """Lleva el scroll al principio para evitar 'acolchonados' iniciales."""
+        def do_it():
+            sb = self.scroll.verticalScrollBar()
+            if sb: sb.setValue(sb.minimum())
+        do_it()
+        if async_call:
+            QTimer.singleShot(0, do_it)
+
+    # ---------- Acciones ----------
     def _exportar_excel_click(self):
         ruta, _ = QFileDialog.getSaveFileName(self, "Guardar como", "Obras.xlsx", "Excel (*.xlsx)")
         if not ruta: return
@@ -230,7 +243,10 @@ class ObrasWidget(QWidget):
             QMessageBox.critical(self, "Error", f"No se pudo cerrar:\n{e}")
 
     def cargar_obras(self):
-        self.cards.clear()
+        print(">>> cargar_obras ejecutado")
+        self.obras = []
+        self.cards = []
+
         try:
             with conexion() as c, c.cursor() as cur:
                 cur.execute("""
@@ -238,38 +254,63 @@ class ObrasWidget(QWidget):
                     FROM obras
                     ORDER BY fecha_inicio DESC NULLS LAST, id_obra DESC
                 """)
-                obras = cur.fetchall()
+                rows = cur.fetchall()
 
-            for (id_obra, nombre, estado, presupuesto_total, fecha_inicio) in obras:
-                fecha_txt = _to_qdate(fecha_inicio).toString("yyyy-MM-dd")
-                self._agregar_card({
+            print(">>> filas BD:", len(rows))
+
+            for (id_obra, nombre, estado, presupuesto_total, fecha_inicio) in rows:
+                obra = {
                     "id_obra": id_obra,
                     "nombre": nombre,
                     "estado": estado or "",
                     "presupuesto_total": float(presupuesto_total or 0),
-                    "fecha_inicio": fecha_txt,
-                })
+                    "fecha_inicio": _to_qdate(fecha_inicio).toString("yyyy-MM-dd"),
+                }
+
+                self.obras.append(obra)
+                self._agregar_card(obra)   # ← ESTA LÍNEA ES LA CLAVE
+
         except Exception as e:
             print("Error cargando obras:", e)
+
         finally:
             self._agregar_card_nueva()
+            self._render_cards()
+
+
+
 
     def refrescar_cards(self):
         self._clear_grid(self.grid)
         self.cards.clear()
         self.cargar_obras()
-        self._reflow()
         self._filtrar_cards()
-
+        self._scroll_to_top(async_call=True)
+    
+    # === REFRESH UI === 
+    def refrescar(self):
+        """
+        Refresca completamente el módulo de Obras
+        """
+        try:
+            # volver siempre al listado
+            self.stack.setCurrentIndex(0)
+            self.headerCard.setVisible(True)
+    
+            # limpiar búsqueda
+            self.search.clear()
+    
+            # recargar datos
+            self.refrescar_cards()
+    
+        except Exception as e:
+            print(f"[Obras.refrescar] Error: {e}")
+    # ---------- Navegación ----------
     def _mostrar_detalles_inline(self, widget: QWidget):
         self.headerCard.setVisible(False)
         self._clear_layout(self.det_layout)
         widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.det_layout.addWidget(widget, 1)
-        try:
-            widget.backRequested.disconnect()
-        except Exception:
-            pass
         widget.backRequested.connect(self._cerrar_detalles_inline)
         self.stack.setCurrentIndex(1)
 
@@ -277,11 +318,13 @@ class ObrasWidget(QWidget):
         self.stack.setCurrentIndex(0)
         self.headerCard.setVisible(True)
         self._filtrar_cards()
+        self._scroll_to_top(async_call=True)
 
     def abrir_detalles_obra(self, id_obra):
         detalle = DetallesObraWidget(id_obra, parent=self)
         self._mostrar_detalles_inline(detalle)
 
+    # ---------- Cards ----------
     def _agregar_card(self, obra):
         card = QFrame(); card.setObjectName("card"); card.setProperty("class","card")
         card.setMinimumHeight(170); card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -294,16 +337,12 @@ class ObrasWidget(QWidget):
         top.addWidget(title); top.addStretch(1); top.addWidget(pill)
 
         btnEdit = QPushButton(); btnEdit.setObjectName("btnObraEditar")
-        btnEdit.setProperty("type", "icon"); btnEdit.setProperty("variant", "edit"); btnEdit.setProperty("perm_code", "obras.update")
-        btnEdit.setIcon(icon("edit"))
+        btnEdit.setProperty("perm_code", "obras.update")
+        style_edit_button(btnEdit, "Editar obra")
 
         btnDel  = QPushButton(); btnDel.setObjectName("btnObraEliminar")
-        btnDel.setProperty("type", "icon"); btnDel.setProperty("variant", "delete"); btnDel.setProperty("perm_code", "obras.delete")
-        btnDel.setIcon(icon("trash"))
-
-        btnEdit.setToolTip("Editar obra"); btnDel.setToolTip("Eliminar obra")
-        btnEdit.style().unpolish(btnEdit); btnEdit.style().polish(btnEdit)
-        btnDel.style().unpolish(btnDel);   btnDel.style().polish(btnDel)
+        btnDel.setProperty("perm_code", "obras.delete")
+        style_delete_button(btnDel, "Eliminar obra")
 
         btnEdit.clicked.connect(lambda: self._editar_obra(obra["id_obra"]))
         btnDel.clicked.connect(lambda: self._eliminar_obra(obra["id_obra"]))
@@ -311,7 +350,10 @@ class ObrasWidget(QWidget):
         v.addLayout(top)
 
         meta = QHBoxLayout(); meta.setContentsMargins(0,0,0,0); meta.setSpacing(14)
-        lbl_pres = QLabel(f"Presupuesto: {obra['presupuesto_total']:.2f} Gs."); lbl_pres.setProperty("muted","true")
+        lbl_pres = QLabel(
+            f"Presupuesto: {formatear_numero(obra['presupuesto_total'])} Gs."
+        )
+        lbl_pres.setProperty("muted", "true")
         lbl_ini  = QLabel(f"Inicio: {obra['fecha_inicio']}"); lbl_ini.setProperty("muted","true")
         meta.addWidget(lbl_pres); meta.addWidget(lbl_ini); meta.addStretch(1)
         v.addLayout(meta)
@@ -323,8 +365,7 @@ class ObrasWidget(QWidget):
         v.addLayout(cta)
 
         self.cards.append((card, obra, False))
-        self.grid.addWidget(card)
-        self._reflow()
+
 
     def _agregar_card_nueva(self):
         add = QFrame(); add.setProperty("class","card"); add.setMinimumHeight(170)
@@ -335,6 +376,8 @@ class ObrasWidget(QWidget):
         plus.clicked.connect(self._abrir_nueva_obra)
         self.cards.append((add, {"id_obra": None}, True))
         self.grid.addWidget(add)
+    
+    
 
     def _abrir_nueva_obra(self):
         self.id_obra_en_edicion = None
@@ -383,70 +426,72 @@ class ObrasWidget(QWidget):
         if self.eliminar_obra_de_bd(id_obra):
             self.refrescar_cards()
 
+    # ---------- Mostrar/Ocultar formulario ----------
     def mostrar_formulario_con_animacion(self):
         self.stack.setCurrentIndex(2)
 
     def ocultar_formulario_con_animacion(self):
         self.stack.setCurrentIndex(0)
         self.id_obra_en_edicion = None
+        self._scroll_to_top(async_call=True)
+ 
+    def _render_cards(self):
+        cols = 2
+        row = 0
+        col = 0
 
-    def resizeEvent(self, event):
-        super().resizeEvent(event); self._reflow()
-
-    def _reflow(self):
-        grid = self.grid
-        if grid is None or self.scroll is None:
-            return
-        vw = self.scroll.viewport().width()
-        hsp = grid.horizontalSpacing() or 12
-        min_w = 310
-        cols = max(1, (vw + hsp) // (min_w + hsp))
-        col_w = max(min_w, (vw - (cols - 1) * hsp) // cols)
-
-        widgets = []
-        while grid.count():
-            it = grid.takeAt(0); w = it.widget()
-            if w: widgets.append(w); w.setParent(None)
-
-        for i, w in enumerate(widgets):
-            w.setMaximumWidth(col_w); w.setMinimumWidth(col_w)
-            w.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            r, c = divmod(i, cols); grid.addWidget(w, r, c)
-
-        for c in range(cols): grid.setColumnStretch(c, 1)
-        grid.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-
-    def _reordenar(self, ordered_frames):
-        widgets = []
+        # limpiar grilla (solo visual)
         while self.grid.count():
-            it = self.grid.takeAt(0); w = it.widget()
-            if w: widgets.append(w); w.setParent(None)
-        for w in ordered_frames:
-            if w in widgets: self.grid.addWidget(w)
-        for w in widgets:
-            if w not in ordered_frames: self.grid.addWidget(w)
+            item = self.grid.takeAt(0)
+            if item.widget():
+                item.widget().setParent(None)
+
+        # renderizar cards existentes
+        for card, _, _ in self.cards:
+            card.setMinimumHeight(200)
+            card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+            self.grid.addWidget(card, row, col)
+
+            col += 1
+            if col >= cols:
+                col = 0
+                row += 1
+
+        # mismo ancho para ambas columnas
+        for c in range(cols):
+            self.grid.setColumnStretch(c, 1)
+
+        self.grid.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+
+
 
     def _filtrar_cards(self):
         text = (self.search.text() or "").strip().lower()
-        visibles, ocultas, add_frame = [], [], None
+
         for frame, obra, es_nueva in self.cards:
             if es_nueva:
-                add_frame = frame
                 frame.setVisible(text == "")
                 continue
+
             nombre = str(obra.get("nombre","")).lower()
             estado = str(obra.get("estado","")).lower()
             inicio = str(obra.get("fecha_inicio","")).lower()
-            match = (text == "") or (text in nombre) or (text in estado) or (text in inicio)
-            frame.setVisible(match)
-            key = (0 if (text and nombre.startswith(text)) else 1, nombre)
-            (visibles if match else ocultas).append((frame, key))
-        visibles.sort(key=lambda t: t[1]); ocultas.sort(key=lambda t: t[1])
-        ordered = [f for f,_ in visibles] + [f for f,_ in ocultas]
-        if text == "" and add_frame is not None:
-            ordered.append(add_frame)
-        self._reordenar(ordered)
 
+            match = (
+                text == ""
+                or text in nombre
+                or text in estado
+                or text in inicio
+            )
+            frame.setVisible(match)
+
+        self._render_cards()
+        self._scroll_to_top(async_call=True)
+
+
+
+    # ---------- Utils limpieza ----------
     @staticmethod
     def _clear_layout(layout):
         while layout.count():

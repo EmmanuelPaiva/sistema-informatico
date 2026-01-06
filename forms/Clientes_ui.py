@@ -18,9 +18,15 @@ from db.clientes_queries import (
 from reports.excel import export_qtable_to_excel
 
 try:
-    from ui_helpers import apply_global_styles, mark_title, make_primary, make_danger, style_table, style_search
+    from ui_helpers import (
+        apply_global_styles, mark_title, make_primary, make_danger,
+        style_table, style_search, style_edit_button, style_delete_button
+    )
 except ModuleNotFoundError:
-    from forms.ui_helpers import apply_global_styles, mark_title, make_primary, make_danger, style_table, style_search
+    from forms.ui_helpers import (
+        apply_global_styles, mark_title, make_primary, make_danger,
+        style_table, style_search, style_edit_button, style_delete_button
+    )
 
 ROW_HEIGHT = 46
 OPCIONES_COL = 5
@@ -45,7 +51,7 @@ class Ui_Form(object):
         self.headerCard = QFrame(Form); self.headerCard.setObjectName("headerCard")
         hl = QHBoxLayout(self.headerCard); hl.setContentsMargins(16,12,16,12); hl.setSpacing(10)
 
-        self.lblTitle = QLabel("Clientes", self.headerCard)
+        self.lblTitle = QLabel("clientes", self.headerCard)
         self.lblTitle.setObjectName("clientesTitle")
         self.lblTitle.setProperty("role", "pageTitle")
         f = QFont(self.lblTitle.font()); f.setBold(False); f.setPointSize(26)
@@ -195,28 +201,32 @@ class Ui_Form(object):
             except Exception:
                 pass
             for btn in cell.findChildren(QPushButton):
+                obj = (btn.objectName() or "").lower()
+                perm = str(btn.property("perm_code") or "").lower()
                 txt = (btn.text() or "").lower()
-                if "edit" in txt or "editar" in txt:
+                if "editar" in obj or "editar" in txt or "edit" in txt or perm.endswith(".update"):
                     self._style_action_button(btn, "edit")
-                elif "del" in txt or "elimin" in txt or "borrar" in txt:
+                elif any(k in obj for k in ("eliminar", "borrar")) or \
+                     any(k in txt for k in ("eliminar", "borrar", "del")) or \
+                     perm.endswith(".delete"):
                     self._style_action_button(btn, "del")
+                else:
+                    # default heuristics: treat icon buttons with no text but already variant set
+                    variant = str(btn.property("variant") or "").lower()
+                    if variant == "edit":
+                        self._style_action_button(btn, "edit")
+                    elif variant == "delete":
+                        self._style_action_button(btn, "del")
                 btn.style().unpolish(btn); btn.style().polish(btn)
 
     def _style_action_button(self, btn: QPushButton, kind: str):
-        btn.setText("")
         btn.setCursor(Qt.PointingHandCursor)
         btn.setMinimumHeight(BTN_MIN_HEIGHT)
         btn.setIconSize(QSize(ICON_PX, ICON_PX))
-        btn.setProperty("type", "icon")
         if kind == "edit":
-            btn.setProperty("variant", "edit")
-            btn.setIcon(icon("edit"))
-            btn.setToolTip("Editar cliente")
+            style_edit_button(btn, "Editar cliente")
         else:
-            btn.setProperty("variant", "delete")
-            btn.setIcon(icon("trash"))
-            btn.setToolTip("Eliminar cliente")
-        btn.style().unpolish(btn); btn.style().polish(btn)
+            style_delete_button(btn, "Eliminar cliente")
 
     def exportar_excel_clientes(self):
         try:

@@ -1,4 +1,5 @@
-# graficos_dashboard.py — optimizado (usa MVs si existen, fallback a tablas; misma lógica/salida)
+# -*- coding: utf-8 -*-
+# graficos_dashboard.py — estable, sin cortes y sin warnings de layout
 
 import os
 from datetime import datetime, timedelta
@@ -14,11 +15,11 @@ from dateutil.relativedelta import relativedelta
 
 from graficos import graficos_style as gs
 gs.apply_chart_theme(False)
+from db.conexion import DATABASE_URL
+# --- Meses abreviados (ES) ---
+_SP_MONTHS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
 
-# --- Abreviaturas de meses en español (independiente del locale) ---
-_SP_MONTHS = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"]
-
-# === Canonicalización de categorías (sin textos del mock) ===
+# --- Canonicalización de categorías ---
 _CATEGORIA_MAP = {
     "material": "Materiales", "materials": "Materiales",
     "labor": "Mano de obra", "mano de obra": "Mano de obra",
@@ -32,7 +33,6 @@ _CATEGORIA_MAP = {
     "otros": "Otros", "other": "Otros", "misc": "Otros",
     "sin tipo": "Sin tipo",
 }
-
 def _canon_label(s: str) -> str:
     k = str(s or "").strip().lower()
     if not k:
@@ -41,66 +41,42 @@ def _canon_label(s: str) -> str:
         return _CATEGORIA_MAP[k]
     return k.capitalize()
 
-def _short(s: str, w: int = 24) -> str:
-    try:
-        import textwrap
-        return textwrap.shorten(str(s), width=w, placeholder="…")
-    except Exception:
-        return str(s)
-
 def get_engine():
-    load_dotenv()
-    url = os.getenv("DATABASE_URL")
-    if url:
-        if "sslmode=" not in url:
-            sep = "&" if "?" in url else "?"
-            url = f"{url}{sep}sslmode=require"
-        return create_engine(url, pool_pre_ping=True)
-    user = os.getenv("PGUSER", "")
-    pwd  = os.getenv("PGPASSWORD", "")
-    host = os.getenv("PGHOST", "localhost")
-    port = os.getenv("PGPORT", "5432")
-    db   = os.getenv("PGDATABASE", "")
-    return create_engine(f"postgresql+psycopg2://{user}:{pwd}@{host}:{port}/{db}", pool_pre_ping=True)
+    """
+    Devuelve un engine de SQLAlchemy usando la misma DATABASE_URL
+    que usa todo el sistema (config.ini + sslmode=require).
+    """
+    return create_engine(DATABASE_URL, pool_pre_ping=True)
 
 # =========================
 # Helpers
 # =========================
-def _fmt_moneda(x: float, sufijo=" Gs") -> str:
-    try:
-        return f"{int(round(x)):,}".replace(",", ".") + sufijo
-    except Exception:
-        return str(x) + sufijo
-
 def _month_floor(dt: datetime) -> datetime:
-    """Primer día de mes (00:00) para un datetime dado."""
     return dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
 def _months_back_start(meses: int) -> datetime:
-    """Devuelve el primer día del mes de la ventana de `meses` hacia atrás (incluye el mes actual)."""
     end = _month_floor(datetime.today())
     start = end - relativedelta(months=meses - 1)
     return _month_floor(start)
 
 def _read_df(con, sql_mv, sql_base, params=None):
-    """
-    Intenta leer desde la MV (columnas esperadas: periodo::date, total::numeric);
-    si no existe o falla el esquema, cae a la consulta base sobre tablas.
-    """
     try:
         return pd.read_sql(text(sql_mv), con, params=params)
     except ProgrammingError:
         return pd.read_sql(text(sql_base), con, params=params)
 
+def _dpi():
+    # Usa gs.BASE_DPI si existe; si no, deja que Matplotlib decida
+    return getattr(gs, "BASE_DPI", None)
+
 # ============================================================
-# 1) Ventas vs Compras mensuales (usa MVs si existen)
+# 1) Ventas vs Compras mensuales
 # ============================================================
 def create_ventas_vs_compras_mensuales(engine=None, meses=12):
     engine = engine or get_engine()
-    desde = _months_back_start(meses).date()  # filtramos en SQL para menos transferencia
+    desde = _months_back_start(meses).date()
 
     with engine.connect() as con:
-        # --- Ventas
         qv_mv = """
             SELECT periodo, total
             FROM public.mv_ventas_mensual
@@ -112,12 +88,10 @@ def create_ventas_vs_compras_mensuales(engine=None, meses=12):
                    COALESCE(SUM(total_venta),0) AS total
             FROM public.ventas
             WHERE fecha_venta >= :desde
-            GROUP BY 1
-            ORDER BY 1
+            GROUP BY 1 ORDER BY 1
         """
         dfv = _read_df(con, qv_mv, qv_base, params={"desde": desde})
 
-        # --- Compras
         qc_mv = """
             SELECT periodo, total
             FROM public.mv_compras_mensual
@@ -129,12 +103,10 @@ def create_ventas_vs_compras_mensuales(engine=None, meses=12):
                    COALESCE(SUM(total_compra),0) AS total
             FROM public.compras
             WHERE fecha >= :desde
-            GROUP BY 1
-            ORDER BY 1
+            GROUP BY 1 ORDER BY 1
         """
         dfc = _read_df(con, qc_mv, qc_base, params={"desde": desde})
 
-    # Índice visible de meses (mismo comportamiento que tu versión)
     end = _month_floor(datetime.today())
     months = [(end - pd.DateOffset(months=i)).date() for i in range(meses - 1, -1, -1)]
     idx = pd.to_datetime(pd.Series(months))
@@ -144,10 +116,9 @@ def create_ventas_vs_compras_mensuales(engine=None, meses=12):
 
     sv_scaled, suf = gs.maybe_scale_to_millions(sv)
     sc_scaled, _   = gs.maybe_scale_to_millions(sc)
-
     labels = [_SP_MONTHS[d.month - 1] for d in idx]
 
-    fig, ax = plt.subplots(figsize=(8.2, 4.4))
+    fig, ax = plt.subplots(figsize=(8.2, 4.4), dpi=_dpi())
     gs.bars_grouped_willow(
         ax,
         categories=labels,
@@ -157,18 +128,24 @@ def create_ventas_vs_compras_mensuales(engine=None, meses=12):
         show_values=False
     )
     ax.set_title(f"Ventas vs Compras mensuales{suf}")
+
     gs.legend_chips(
         ax,
         [("Ventas", gs.P_PRIMARY), ("Compras", gs.P_SECONDARY)],
         loc="upper left",
-        anchor=(0, 1.03),
+        anchor=(0.02, 0.98),
         fontsize=10
     )
+
+    # Márgenes propios seguros (evitan cortes)
+    gs.disable_layout_engine(fig)
+    fig._rodler_custom_margins = True
+    fig.subplots_adjust(left=0.07, right=0.995, top=0.90, bottom=0.28)
     gs.tight_fig(fig)
     return fig
 
 # ============================================================
-# 2) Gastos mensuales (línea) — usa MV si existe
+# 2) Gastos mensuales (línea)
 # ============================================================
 def create_gastos_mensuales(engine=None, meses=12):
     engine = engine or get_engine()
@@ -176,18 +153,15 @@ def create_gastos_mensuales(engine=None, meses=12):
 
     with engine.connect() as con:
         q_mv = """
-            SELECT periodo, total
-            FROM public.mv_gastos_mensual
-            WHERE periodo >= :desde
-            ORDER BY periodo
+            SELECT periodo, total FROM public.mv_gastos_mensual
+            WHERE periodo >= :desde ORDER BY periodo
         """
         q_base = """
             SELECT DATE_TRUNC('month', fecha)::date AS periodo,
                    COALESCE(SUM(costo_total),0) AS total
             FROM public.gastos
             WHERE fecha >= :desde
-            GROUP BY 1
-            ORDER BY 1
+            GROUP BY 1 ORDER BY 1
         """
         df = _read_df(con, q_mv, q_base, params={"desde": desde})
 
@@ -199,21 +173,19 @@ def create_gastos_mensuales(engine=None, meses=12):
     s_scaled, suf = gs.maybe_scale_to_millions(s)
     xlabels = [_SP_MONTHS[d.month - 1] for d in idx]
 
-    fig, ax = plt.subplots(figsize=(8.4, 4.2))
+    fig, ax = plt.subplots(figsize=(8.4, 4.2), dpi=_dpi())
     gs.line_smooth(ax, xlabels, s_scaled, title=f"Gastos mensuales{suf}", area=True)
+
+    gs.disable_layout_engine(fig)
+    fig._rodler_custom_margins = True
+    fig.subplots_adjust(left=0.07, right=0.995, top=0.92, bottom=0.28)
     gs.tight_fig(fig)
     return fig
 
 # ============================================================
 # 3) Presupuesto vs Gasto por obra (barras agrupadas)
-#    Subconsulta agregada para gasto (aprovecha idx_trabajos_obra si existe).
 # ============================================================
 def create_presupuesto_vs_gasto_por_obra(engine=None, top_n=10):
-    """
-    Compara Presupuesto vs Gasto por obra (mismo resultado), pero:
-    - Suma costos de trabajos en una subconsulta agrupada (aprovecha índices por obra).
-    - Limita en SQL por presupuesto (reduce transferencia).
-    """
     engine = engine or get_engine()
     with engine.connect() as con:
         q = text("""
@@ -222,8 +194,7 @@ def create_presupuesto_vs_gasto_por_obra(engine=None, top_n=10):
                 FROM public.trabajos t
                 GROUP BY t.obra_id
             )
-            SELECT o.id_obra,
-                   o.nombre,
+            SELECT o.id_obra, o.nombre,
                    COALESCE(o.presupuesto_total, 0) AS presupuesto,
                    COALESCE(g.gasto, 0) AS gasto
             FROM public.obras o
@@ -234,7 +205,7 @@ def create_presupuesto_vs_gasto_por_obra(engine=None, top_n=10):
         df = pd.read_sql(q, con, params={"top_n": int(top_n)})
 
     if df.empty:
-        fig, ax = plt.subplots(figsize=(7.6, 4.2))
+        fig, ax = plt.subplots(figsize=(7.6, 4.2), dpi=_dpi())
         ax.text(0.5, 0.5, "Sin datos de obras", ha="center", va="center", color=gs.INK_MAIN)
         ax.axis("off")
         return fig
@@ -243,11 +214,10 @@ def create_presupuesto_vs_gasto_por_obra(engine=None, top_n=10):
     pres_scaled, suf = gs.maybe_scale_to_millions(df["presupuesto"])
     gast_scaled, _   = gs.maybe_scale_to_millions(df["gasto"])
 
-    fig, ax = plt.subplots(figsize=(9.2, 5.0))
+    fig, ax = plt.subplots(figsize=(9.2, 5.0), dpi=_dpi())
 
     x = np.arange(len(cats))
-    bw = 0.36
-    gap = 0.06
+    bw, gap = 0.36, 0.06
     pres_x = x - (bw/2 + gap/2)
     gast_x = x + (bw/2 + gap/2)
 
@@ -256,10 +226,9 @@ def create_presupuesto_vs_gasto_por_obra(engine=None, top_n=10):
     b2 = ax.bar(gast_x, gast_scaled, width=bw, label="Gasto",
                 color=gs.P_PRIMARY, edgecolor="white", linewidth=0.6)
 
-    ax.set_xticks(x, cats, rotation=0, ha="center")
+    ax.set_xticks(x, cats)
     ax.tick_params(axis="x", labelsize=9)
     ax.tick_params(axis="y", labelsize=9)
-
     ax.grid(axis="y", linestyle="--", linewidth=0.6, alpha=0.35)
     for sp in ("top", "right"):
         ax.spines[sp].set_visible(False)
@@ -271,22 +240,27 @@ def create_presupuesto_vs_gasto_por_obra(engine=None, top_n=10):
 
     for rect, p in zip(b2, pct.to_list()):
         h = rect.get_height()
-        if h <= 0:
-            continue
-        ax.text(rect.get_x() + rect.get_width()/2, h + yoff, f"{p:.1f}%",
-                ha="center", va="bottom", fontsize=9, color=gs.INK_MAIN)
+        if h > 0:
+            ax.text(rect.get_x() + rect.get_width()/2, h + yoff, f"{p:.1f}%",
+                    ha="center", va="bottom", fontsize=9, color=gs.INK_MAIN)
 
     ax.legend(frameon=False, fontsize=9)
     ax.set_ylabel(f"Monto{suf}", fontsize=10)
     gs.pro_axes(ax, title=f"Presupuesto vs Gasto por obra{suf}")
+
+    gs.disable_layout_engine(fig)
+    fig._rodler_custom_margins = True
+    fig.subplots_adjust(left=0.07, right=0.995, top=0.92, bottom=0.28)
     gs.tight_fig(fig)
     return fig
 
 # ============================================================
-# 4) Distribución de gastos por tipo (donut) — misma lógica
+# 4) Distribución de gastos por tipo (donut a la derecha)
 # ============================================================
 def create_distribucion_gastos_por_tipo(engine=None, max_cats: int = 5, min_pct_otro: float = 0.03):
+    from matplotlib import gridspec
     engine = engine or get_engine()
+
     with engine.connect() as con:
         q = text("""
             SELECT COALESCE(NULLIF(TRIM(tipo), ''), 'Sin tipo') AS tipo,
@@ -298,31 +272,37 @@ def create_distribucion_gastos_por_tipo(engine=None, max_cats: int = 5, min_pct_
         df_raw = pd.read_sql(q, con)
 
     if df_raw.empty:
-        fig, ax = plt.subplots(figsize=(6.8, 4.0))
+        fig, ax = plt.subplots(figsize=(9.8, 5.2), dpi=_dpi())
+        gs.disable_layout_engine(fig)
         ax.text(0.5, 0.5, 'Sin datos de gastos', ha='center', va='center', color=gs.INK_MAIN)
         ax.axis('off')
+        fig._rodler_custom_margins = True
+        fig.subplots_adjust(left=0.06, right=0.99, top=0.94, bottom=0.12)
+        gs.tight_fig(fig)
         return fig
 
     df_raw["tipo"] = df_raw["tipo"].apply(_canon_label)
     df = df_raw.groupby("tipo", as_index=False)["total"].sum()
-
     total = float(df["total"].sum())
     if total <= 0:
-        fig, ax = plt.subplots(figsize=(6.8, 4.0))
+        fig, ax = plt.subplots(figsize=(9.8, 5.2), dpi=_dpi())
+        gs.disable_layout_engine(fig)
         ax.text(0.5, 0.5, 'Sin datos de gastos', ha='center', va='center', color=gs.INK_MAIN)
         ax.axis('off')
+        fig._rodler_custom_margins = True
+        fig.subplots_adjust(left=0.06, right=0.99, top=0.94, bottom=0.12)
+        gs.tight_fig(fig)
         return fig
 
+    # Compactación a top + "Otros"
     df = df.sort_values("total", ascending=False).reset_index(drop=True)
     df["pct"] = df["total"] / total
-
     small = df[df["pct"] < min_pct_otro]
     big   = df[df["pct"] >= min_pct_otro]
     otros_total = float(small["total"].sum())
     df = big.copy()
     if otros_total > 0:
         df = pd.concat([df, pd.DataFrame([{"tipo": "Otros", "total": otros_total}])], ignore_index=True)
-
     if len(df) > max_cats:
         top = df.head(max_cats - 1)
         resto = df.iloc[max_cats - 1:]["total"].sum()
@@ -334,22 +314,69 @@ def create_distribucion_gastos_por_tipo(engine=None, max_cats: int = 5, min_pct_
             else:
                 df = pd.concat([df, pd.DataFrame([{"tipo": "Otros", "total": resto}])], ignore_index=True)
 
-    total_final = float(df["total"].sum())
-    df["pct"] = df["total"] / total_final
-
-    fig, ax = plt.subplots(figsize=(7.0, 4.6))
-    base_colors = [gs.P_PRIMARY, gs.P_SECONDARY, gs.P_ACCENT, gs.P_WARN, gs.P_DANGER, gs.INK_MUTE]
-    colors = (base_colors * ((len(df) // len(base_colors)) + 1))[:len(df)]
-
+    vals = df["total"].to_numpy(dtype=float)
     labels = df["tipo"].tolist()
-    values = df["total"].to_numpy(dtype=float)
+    total_final = float(vals.sum())
+    pct = (vals / total_final) * 100.0
 
-    gs.donut_willow(ax, percent_text="", values=values, labels=labels, colors=colors)
+    base_colors = [gs.P_PRIMARY, gs.P_SECONDARY, gs.P_ACCENT, gs.P_WARN, gs.P_DANGER, gs.INK_MUTE]
+    colors = (base_colors * ((len(vals) // len(base_colors)) + 1))[:len(vals)]
+
+    # --- layout: [leyenda | donut] ---
+    fig = plt.figure(figsize=(9.8, 5.2), dpi=_dpi())
+    gs.disable_layout_engine(fig)
+    gspe = gridspec.GridSpec(nrows=1, ncols=2, width_ratios=[0.58, 0.42], figure=fig)
+    ax_left  = fig.add_subplot(gspe[0, 0])   # leyenda
+    ax_right = fig.add_subplot(gspe[0, 1])   # donut
+
+    # Donut a la DERECHA
+    ax_right.pie(
+        vals,
+        labels=None,
+        startangle=90,
+        colors=colors[:len(vals)],
+        wedgeprops=dict(width=0.44, edgecolor="white"),
+        autopct=None,
+        normalize=True
+    )
+    ax_right.add_artist(plt.Circle((0, 0), 0.60, fc=gs.BG))
+    ax_right.set_aspect("equal")
+    ax_right.margins(0.04)
+
+    # Número arriba (ligeramente más abajo para no cortarse)
+    ax_right.text(
+        0.5, 1.04,
+        f"{int(round(total_final)):,}".replace(",", ".") + " Gs",
+        transform=ax_right.transAxes, ha="center", va="bottom",
+        fontsize=16, color=gs.INK_MAIN, fontweight="bold"
+    )
+    ax_right._rodler_preserve_axes_text = True
+
+    # Leyenda a la IZQUIERDA (texto + “bullet” de color)
+    ax_left.set_axis_off()
+    ax_left._rodler_preserve_axes_text = True
+
+    legend_lines = [
+        f"{gs.short_label(lbl, 28)} · {p:.1f}% · {int(round(v)):,}".replace(",", ".") + " Gs"
+        for lbl, p, v in zip(labels, pct, vals)
+    ]
+
+    y0, dy = 0.96, 0.09
+    for i, (c, txt) in enumerate(zip(colors[:len(legend_lines)], legend_lines)):
+        y = y0 - i * dy
+        ax_left.add_patch(plt.Rectangle((0.02, y - 0.02), 0.035, 0.035,
+                                        transform=ax_left.transAxes, color=c, clip_on=False))
+        ax_left.text(0.065, y, txt, transform=ax_left.transAxes,
+                     ha="left", va="center", fontsize=10, color=gs.INK_MAIN)
+
+    gs.disable_layout_engine(fig)
+    fig._rodler_custom_margins = True
+    fig.subplots_adjust(left=0.05, right=0.995, top=0.98, bottom=0.12, wspace=0.02)
     gs.tight_fig(fig)
     return fig
 
 # ============================================================
-# 5) Stock crítico (barh) — misma lógica; WHERE + ORDER BY indexables
+# 5) Stock crítico (barh)
 # ============================================================
 def create_stock_critico(engine=None, limit=10):
     engine = engine or get_engine()
@@ -368,14 +395,14 @@ def create_stock_critico(engine=None, limit=10):
         df = pd.read_sql(q, con, params={'limit': int(limit)})
 
     if df.empty:
-        fig, ax = plt.subplots(figsize=(7.2, 3.5))
+        fig, ax = plt.subplots(figsize=(7.2, 3.5), dpi=_dpi())
         ax.text(0.5, 0.5, 'Sin productos en nivel crítico', ha='center', va='center', color=gs.INK_MAIN)
         ax.axis('off')
         return fig
 
     df['nombre_corto'] = df['nombre'].apply(lambda s: gs.short_label(s, width=28))
 
-    fig, ax = plt.subplots(figsize=(8.8, 4.8))
+    fig, ax = plt.subplots(figsize=(8.8, 4.8), dpi=_dpi())
     bars = ax.barh(df['nombre_corto'], df['deficit'], color=gs.P_DANGER)
 
     ax.invert_yaxis()
@@ -394,17 +421,16 @@ def create_stock_critico(engine=None, limit=10):
                 gs.fmt_thousands_smart(w),
                 va='center', ha='left', fontsize=10, color=gs.INK_MAIN)
 
+    gs.disable_layout_engine(fig)
+    fig._rodler_custom_margins = True
+    fig.subplots_adjust(left=0.14, right=0.98, top=0.92, bottom=0.20)
     gs.tight_fig(fig)
     return fig
 
 # ============================================================
-# 6) Materiales más usados en el mes (barh) — desde obras
+# 6) Materiales más usados en el mes (barh)
 # ============================================================
 def create_top_materiales_mes(engine=None, dias=30, limit=10):
-    """
-    TOP-N materiales más usados (consumidos) en obras durante los últimos `dias`.
-    Se calcula desde gastos vinculados a obras (no ventas).
-    """
     engine = engine or get_engine()
     desde = (datetime.today() - timedelta(days=dias)).date()
 
@@ -429,14 +455,14 @@ def create_top_materiales_mes(engine=None, dias=30, limit=10):
         df = pd.read_sql(q, con, params={'desde': desde, 'limit': int(limit)})
 
     if df.empty:
-        fig, ax = plt.subplots(figsize=(7.2, 3.5))
+        fig, ax = plt.subplots(figsize=(7.2, 3.5), dpi=_dpi())
         ax.text(0.5, 0.5, 'Sin consumos recientes de materiales en obras', ha='center', va='center', color=gs.INK_MAIN)
         ax.axis('off')
         return fig
 
     df['material_corto'] = df['material'].apply(lambda s: gs.short_label(s, width=28))
 
-    fig, ax = plt.subplots(figsize=(7.6, 4.6))
+    fig, ax = plt.subplots(figsize=(7.8, 4.6), dpi=_dpi())
     bars = ax.barh(df['material_corto'], df['total_unidades'], color=gs.P_PRIMARY, edgecolor='none')
 
     ax.invert_yaxis()
@@ -452,5 +478,8 @@ def create_top_materiales_mes(engine=None, dias=30, limit=10):
                 gs.fmt_thousands(w),
                 va='center', ha='left', fontsize=9, color=gs.INK_MAIN)
 
+    gs.disable_layout_engine(fig)
+    fig._rodler_custom_margins = True
+    fig.subplots_adjust(left=0.18, right=0.98, top=0.92, bottom=0.20)
     gs.tight_fig(fig)
     return fig

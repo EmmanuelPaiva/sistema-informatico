@@ -2,7 +2,7 @@ import sys, os, platform
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from pathlib import Path
-from PySide6.QtCore import Qt, QSize, QCoreApplication, QMetaObject
+from PySide6.QtCore import Qt, QSize, QCoreApplication, QMetaObject, QTimer
 from PySide6.QtGui import QIcon, QFont
 from PySide6.QtWidgets import (
     QApplication, QWidget, QGridLayout, QFrame, QVBoxLayout, QHBoxLayout,
@@ -17,9 +17,15 @@ from db.prov_queries import (
 )
 
 try:
-    from ui_helpers import apply_global_styles, mark_title, make_primary, make_danger, style_table, style_search
+    from ui_helpers import (
+        apply_global_styles, mark_title, make_primary, make_danger,
+        style_table, style_search, style_edit_button, style_delete_button
+    )
 except ModuleNotFoundError:
-    from forms.ui_helpers import apply_global_styles, mark_title, make_primary, make_danger, style_table, style_search
+    from forms.ui_helpers import (
+        apply_global_styles, mark_title, make_primary, make_danger,
+        style_table, style_search, style_edit_button, style_delete_button
+    )
 
 from reports.excel import export_qtable_to_excel
 
@@ -50,20 +56,22 @@ def icon(name: str) -> QIcon:
     return themed_icon(name)
 
 def _style_action_button(btn: QPushButton, kind: str):
-    btn.setText("")
     btn.setCursor(Qt.PointingHandCursor)
     btn.setMinimumHeight(BTN_MIN_HEIGHT)
     btn.setIconSize(QSize(ICON_PX, ICON_PX))
-    btn.setProperty("type", "icon")
     if kind == "edit":
+        # Propiedades que suelen enganchar el QSS pastel
         btn.setProperty("variant", "edit")
-        btn.setIcon(icon("edit"))
-        btn.setToolTip("Editar proveedor")
+        btn.setProperty("tone", "pastel")
+        style_edit_button(btn, "Editar proveedor")
     else:
-        btn.setProperty("variant", "delete")
-        btn.setIcon(icon("trash"))
-        btn.setToolTip("Eliminar proveedor")
-    btn.style().unpolish(btn); btn.style().polish(btn)
+        btn.setProperty("variant", "danger")  # o "delete" según tu QSS
+        btn.setProperty("tone", "pastel")
+        style_delete_button(btn, "Eliminar proveedor")
+    # Re-evaluar estilo tras setear propiedades
+    btn.style().unpolish(btn)
+    btn.style().polish(btn)
+    btn.update()
 
 class Ui_Form(object):
     def setupUi(self, Form):
@@ -79,7 +87,7 @@ class Ui_Form(object):
         self.headerCard = QFrame(Form); self.headerCard.setObjectName("headerCard")
         h = QHBoxLayout(self.headerCard); h.setContentsMargins(16,12,16,12); h.setSpacing(10)
 
-        self.lblTitle = QLabel("Proveedores", self.headerCard)
+        self.lblTitle = QLabel("proveedores", self.headerCard)
         self.lblTitle.setObjectName("proveedoresTitle")
         self.lblTitle.setProperty("role","pageTitle")
         f = QFont(self.lblTitle.font()); f.setBold(False); f.setPointSize(26)
@@ -149,6 +157,10 @@ class Ui_Form(object):
         tv.addWidget(self.table)
         self.grid.addWidget(self.tableCard, 1, 0, 1, 1)
 
+        # === Importante: aplicar estilos globales ANTES de cargar/colorear ===
+        apply_global_styles(Form)
+
+        # Conexiones y datos (después del polish global)
         self.search.textChanged.connect(
             lambda text: buscar_proveedores(
                 text, self.table,
@@ -160,7 +172,9 @@ class Ui_Form(object):
         cargar_proveedores(self.table, edit_callback=self.abrir_formulario_editar, main_form_widget=Form)
         self._post_refresh_table()
 
-        apply_global_styles(Form)
+        # Asegurar recoloreo tras el ciclo de eventos (por si el QSS repintó)
+        QTimer.singleShot(0, self._post_refresh_table)
+
         self.lblTitle.setStyleSheet("""
             #proveedoresTitle {
                 font-size: 32px;
@@ -234,10 +248,15 @@ class Ui_Form(object):
             except Exception:
                 pass
             for btn in cell.findChildren(QPushButton):
+                obj = (btn.objectName() or "").lower()
+                perm = str(btn.property("perm_code") or "").lower()
                 txt = (btn.text() or "").lower()
-                if "edit" in txt or "editar" in txt:
+                variant = str(btn.property("variant") or "").lower()
+                if "editar" in obj or "edit" in txt or perm.endswith(".update") or variant == "edit":
                     _style_action_button(btn, "edit")
-                elif "del" in txt or "elimin" in txt or "borrar" in txt:
+                elif any(k in obj for k in ("eliminar", "borrar")) or \
+                     any(k in txt for k in ("eliminar", "borrar", "del")) or \
+                     perm.endswith(".delete") or variant == "delete":
                     _style_action_button(btn, "del")
                 btn.style().unpolish(btn); btn.style().polish(btn)
 
@@ -283,8 +302,16 @@ class Ui_Form(object):
         self.grid.addWidget(self.tableCard, 2, 0, 1, 1)
         self.ui_nuevo_proveedor.pushButtonCancelar.clicked.connect(lambda: self.cancelar(Form))
         self.ui_nuevo_proveedor.pushButton.clicked.connect(
-            lambda: guardar_registro(self.ui_nuevo_proveedor, self.formularioProveedor,
-                                     self.table, self.abrir_formulario_editar, Form)
+            lambda: (
+                guardar_registro(
+                    self.ui_nuevo_proveedor,
+                    self.formularioProveedor,
+                    self.table,
+                    self.abrir_formulario_editar,
+                    Form,
+                ),
+                self._post_refresh_table(),
+            )
         )
 
     def abrir_formulario_editar(self, Form, id_proveedor):
@@ -312,8 +339,17 @@ class Ui_Form(object):
             self.ui_nuevo_proveedor.lineEditCorreo.setText(mail)
         self.ui_nuevo_proveedor.pushButtonCancelar.clicked.connect(lambda: self.cancelar(Form))
         self.ui_nuevo_proveedor.pushButton.clicked.connect(
-            lambda: editar_proveedor(self.ui_nuevo_proveedor, self.table, id_proveedor,
-                                     self.formularioProveedor, self.abrir_formulario_editar, Form)
+            lambda: (
+                editar_proveedor(
+                    self.ui_nuevo_proveedor,
+                    self.table,
+                    id_proveedor,
+                    self.formularioProveedor,
+                    self.abrir_formulario_editar,
+                    Form,
+                ),
+                self._post_refresh_table(),
+            )
         )
 
     def retranslateUi(self, Form):

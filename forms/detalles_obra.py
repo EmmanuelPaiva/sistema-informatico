@@ -1,5 +1,9 @@
 # detalles_obra_willow.py — optimizado (misma lógica; render y refrescos más rápidos)
 import sys, os, platform, traceback
+
+from matplotlib import table
+
+from utils.normNumbers import formatear_numero
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from pathlib import Path
@@ -14,6 +18,8 @@ from PySide6.QtWidgets import (
 
 from db.conexion import conexion
 from forms.AgregarGasto import GastoFormWidget
+from forms.ui_helpers import style_edit_button, style_delete_button
+from utils.normNumbers import formatear_numero
 
 # ===== Iconos
 def _desktop_dir() -> Path:
@@ -130,6 +136,7 @@ class DetallesObraWidget(QWidget):
         # Secciones (etapas)
         self.sections = QVBoxLayout(); self.sections.setContentsMargins(0,0,0,0); self.sections.setSpacing(12)
         self.v.addLayout(self.sections)
+        self.v.addStretch(1)
 
         # Estructuras
         self.trabajos = []           # [{id, nombre, descripcion, fecha_inicio, fecha_fin, gastos:[...]}]
@@ -148,8 +155,10 @@ class DetallesObraWidget(QWidget):
         return d or ""
 
     def _fmt_money(self, n):
-        try: return f"{float(n):,.0f} Gs.".replace(",", ".")
-        except Exception: return str(n) if n is not None else ""
+        try:
+            return f"{formatear_numero(float(n))} Gs."
+        except Exception:
+            return str(n) if n is not None else ""
 
     def _qdate(self, v):
         if isinstance(v, (date, datetime)): return QDate(v.year, v.month, v.day)
@@ -185,7 +194,8 @@ class DetallesObraWidget(QWidget):
         if f_ini:  meta_bits.append(f"Inicio: {self._fmt_date(f_ini)}")
         if f_fin:  meta_bits.append(f"Fin: {self._fmt_date(f_fin)}")
         if direccion: meta_bits.append(f"Dirección: {direccion}")
-        if m2 is not None: meta_bits.append(f"{float(m2):,.0f} m²".replace(",", "."))
+        if m2 is not None:
+            meta_bits.append(f"{formatear_numero(float(m2))} m²")
         if presupuesto is not None: meta_bits.append(f"Presupuesto: {self._fmt_money(presupuesto)}")
         self.lbl_meta.setText("  •  ".join(meta_bits))
 
@@ -265,6 +275,7 @@ class DetallesObraWidget(QWidget):
 
         for idx, etapa in enumerate(self.trabajos):
             card = QFrame(); card.setObjectName("card")
+            card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
             cv = QVBoxLayout(card); cv.setContentsMargins(16,16,16,16); cv.setSpacing(10)
 
             # Header etapa
@@ -273,8 +284,10 @@ class DetallesObraWidget(QWidget):
             pill = QLabel(f"{self._fmt_date(etapa['fecha_inicio'])} → {self._fmt_date(etapa['fecha_fin'])}"); pill.setProperty("pill","true")
             h.addWidget(title); h.addSpacing(6); h.addWidget(pill); h.addStretch(1)
 
-            btnEdit = QToolButton(); btnEdit.setProperty("type","icon"); btnEdit.setProperty("variant","edit"); btnEdit.setIcon(icon("edit")); btnEdit.setToolTip("Editar etapa")
-            btnDel  = QToolButton(); btnDel.setProperty("type","icon"); btnDel.setProperty("variant","delete"); btnDel.setIcon(icon("trash")); btnDel.setToolTip("Eliminar etapa")
+            btnEdit = QToolButton()
+            style_edit_button(btnEdit, "Editar etapa")
+            btnDel  = QToolButton()
+            style_delete_button(btnDel, "Eliminar etapa")
             btnAddG = QPushButton("Agregar gasto"); btnAddG.setProperty("type","primary"); btnAddG.setIcon(icon("plus"))
 
             btnEdit.clicked.connect(lambda _, i=idx: self._editar_etapa(i))
@@ -283,20 +296,26 @@ class DetallesObraWidget(QWidget):
 
             h.addWidget(btnEdit); h.addWidget(btnDel); h.addWidget(btnAddG)
             cv.addLayout(h)
+            cv.addSpacing(6)
 
-            # Formularios LAZY (no se crean ahora; se crean al abrir)
             self._forms_editar[idx] = None
             self._forms_gasto[idx]  = None
 
-            # Tabla de gastos (rápida)
             table = QTableWidget()
-            table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            table.setMinimumHeight(140)
-            table.setColumnCount(7)
-            table.setHorizontalHeaderLabels(["Tipo", "Descripción", "Cantidad", "Unidad", "Costo Unitario", "Total", "Fecha"])
+
+            table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+            table.setMinimumHeight(180)
+
+            table.setColumnCount(8)
+            table.setHorizontalHeaderLabels([
+                "Tipo", "Descripción", "Cantidad", "Unidad",
+                "Costo Unitario", "Total", "Fecha", "Opciones"
+            ])
 
             th = table.horizontalHeader()
             th.setSectionResizeMode(QHeaderView.Interactive)
+            th.setStretchLastSection(True) 
+
             table.setColumnWidth(0, 110)
             table.setColumnWidth(1, 280)
             table.setColumnWidth(2, 90)
@@ -304,13 +323,12 @@ class DetallesObraWidget(QWidget):
             table.setColumnWidth(4, 120)
             table.setColumnWidth(5, 120)
             table.setColumnWidth(6, 110)
-            th.setStretchLastSection(False)
+            table.setColumnWidth(7, 110)
 
             table.verticalHeader().setVisible(False)
             table.setWordWrap(False)
-            table.setAlternatingRowColors(False)
+            table.setAlternatingRowColors(True)
             table.setSortingEnabled(False)
-            table.setSizeAdjustPolicy(QAbstractScrollArea.AdjustIgnored)  # rápido
             table.setUpdatesEnabled(False)
             self._popular_tabla(table, etapa["gastos"])
             table.setUpdatesEnabled(True)
@@ -367,9 +385,20 @@ class DetallesObraWidget(QWidget):
     def _toggle_form_gasto(self, idx: int):
         g = self._ensure_gasto_form(idx)
         e = self._forms_editar.get(idx)
-        if e and e.isVisible(): e.setVisible(False)
-        g.setVisible(not g.isVisible())
-        if g.isVisible(): g.input_desc.setFocus()
+
+        if e and e.isVisible():
+            e.setVisible(False)
+
+        visible = not g.isVisible()
+        g.setVisible(visible)
+
+        if visible:
+            g.input_desc.setFocus()
+
+       
+        table = self._tablas.get(idx)
+        if table:
+            self._fit_table_height(table, max_height=360)
 
     def _ocultar_form_gasto(self, idx: int):
         g = self._forms_gasto.get(idx)
@@ -384,16 +413,22 @@ class DetallesObraWidget(QWidget):
             tabla.setItem(r, 1, QTableWidgetItem(g.get('descripcion') or ""))
             tabla.setItem(r, 2, QTableWidgetItem(str(g.get('cantidad') or 0)))
             tabla.setItem(r, 3, QTableWidgetItem(g.get('unidad') or ""))
-            tabla.setItem(r, 4, QTableWidgetItem(f"{float(g.get('precio') or 0):.2f}"))
-            tabla.setItem(r, 5, QTableWidgetItem(f"{float(g.get('total') or 0):.2f}"))
+            tabla.setItem(r, 4, QTableWidgetItem(formatear_numero(g.get("precio") or 0)))
+            tabla.setItem(r, 5, QTableWidgetItem(formatear_numero(g.get("total") or 0)))
             tabla.setItem(r, 6, QTableWidgetItem(g.get('fecha') or ""))
 
+            # Guardamos ID del gasto en la fila
+            tabla.item(r, 0).setData(Qt.UserRole, g["id"])
+
+            self._agregar_botones_opciones(tabla, r)
+
     def _fit_table_height(self, tabla: QTableWidget, max_height=360):
-        row_h = 24
+        row_h = 60
         header_h = tabla.horizontalHeader().height() if tabla.horizontalHeader() else 24
         desired = header_h + (tabla.rowCount() * row_h) + 16
         tabla.verticalHeader().setDefaultSectionSize(row_h)
-        tabla.setFixedHeight(min(max(desired, 140), max_height))
+        tabla.setMinimumHeight(min(max(desired, 140), max_height))
+        tabla.setMaximumHeight(max_height)
 
     # ---------- CRUD Etapas ----------
     def _crear_etapa_en_db(self, datos: dict):
@@ -584,14 +619,154 @@ class DetallesObraWidget(QWidget):
             table.setItem(0, 1, QTableWidgetItem(g["descripcion"]))
             table.setItem(0, 2, QTableWidgetItem(str(g["cantidad"])))
             table.setItem(0, 3, QTableWidgetItem(g["unidad"]))
-            table.setItem(0, 4, QTableWidgetItem(f"{g['precio']:.2f}"))
-            table.setItem(0, 5, QTableWidgetItem(f"{g['total']:.2f}"))
+            table.setItem(0, 4, QTableWidgetItem(formatear_numero(g["precio"])))
+            table.setItem(0, 5, QTableWidgetItem(formatear_numero(g["total"])))
             table.setItem(0, 6, QTableWidgetItem(g["fecha"]))
+
+            item_ref = QTableWidgetItem()
+            item_ref.setData(Qt.UserRole, g)
+            table.setItem(0, 7, item_ref)
+
+            self._agregar_botones_opciones(table, 0)
+
             table.setUpdatesEnabled(True)
             self._fit_table_height(table, max_height=360)
     
         self._ocultar_form_gasto(idx)
 
+    def _agregar_botones_opciones(self, tabla: QTableWidget, row: int):
+        cont = QWidget()
+        lay = QHBoxLayout(cont)
+        lay.setContentsMargins(6, 2, 6, 2)
+        lay.setSpacing(6)
+
+        btn_edit = QToolButton()
+        style_edit_button(btn_edit, "Editar gasto")
+
+        btn_del = QToolButton()
+        style_delete_button(btn_del, "Eliminar gasto")
+
+        gasto_id = tabla.item(row, 0).data(Qt.UserRole)
+
+        btn_edit.clicked.connect(
+            lambda _, r=row, t=tabla: self._editar_gasto_desde_tabla(t, r)
+        )
+        btn_del.clicked.connect(
+            lambda _, r=row, t=tabla: self._eliminar_gasto_desde_tabla(t, r)
+        )
+
+        lay.addWidget(btn_edit)
+        lay.addWidget(btn_del)
+
+        tabla.setCellWidget(row, 7, cont)
+    
+    def _editar_gasto_desde_tabla(self, tabla: QTableWidget, row: int):
+        gasto_id = tabla.item(row, 0).data(Qt.UserRole)
+        if not gasto_id:
+            return
+
+        # Buscar el gasto en memoria y detectar su etapa
+        for idx, etapa in enumerate(self.trabajos):
+            for g in etapa["gastos"]:
+                if g["id"] == gasto_id:
+                    form = self._ensure_gasto_form(idx)
+
+                    # --- Precargar datos en el formulario ---
+                    form.input_desc.setText(g["descripcion"])
+                    form.input_cantidad.setValue(float(g["cantidad"]))
+                    form.input_precio.setValue(float(g["precio"]))
+                    form.input_unidad.setCurrentText(g["unidad"])
+                    form.input_tipo.setCurrentText(g["tipo"])
+                    form.input_fecha.setDate(self._qdate(g["fecha"]))
+
+                    # --- Redefinir submit: UPDATE en vez de INSERT ---
+                    form.on_submit = (
+                        lambda datos, i=idx, gid=gasto_id:
+                        self._actualizar_gasto(i, gid, datos)
+                    )
+
+                    # --- Mostrar correctamente el formulario ---
+                    self._toggle_form_gasto(idx)
+                    return
+
+
+
+    def _actualizar_gasto(self, idx: int, gasto_id: int, datos: dict):
+        cantidad = float(datos.get("cantidad") or 0)
+        precio = float(datos.get("precio") or 0)
+
+        fecha_val = datos.get("fecha")
+        if isinstance(fecha_val, QDate):
+            fecha_val = fecha_val.toPython()
+
+        try:
+            with conexion() as conn, conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE gastos
+                    SET tipo=%s,
+                        concepto=%s,
+                        unidad=%s,
+                        cantidad=%s,
+                        costo_unitario=%s,
+                        fecha=%s
+                    WHERE id=%s
+                """, (
+                    datos.get("tipo"),
+                    datos.get("descripcion"),
+                    datos.get("unidad"),
+                    cantidad,
+                    precio,
+                    fecha_val,
+                    gasto_id
+                ))
+                conn.commit()
+        except Exception as e:
+            traceback.print_exc()
+            QMessageBox.critical(self, "Error", f"{e}")
+            return
+
+        # actualizar memoria
+        for g in self.trabajos[idx]["gastos"]:
+            if g["id"] == gasto_id:
+                g.update({
+                    "tipo": datos.get("tipo"),
+                    "descripcion": datos.get("descripcion"),
+                    "unidad": datos.get("unidad"),
+                    "cantidad": cantidad,
+                    "precio": precio,
+                    "total": cantidad * precio,
+                    "fecha": fecha_val.strftime("%d/%m/%Y"),
+                })
+                break
+
+        self._construir_secciones()
+    
+
+    def _eliminar_gasto_desde_tabla(self, tabla: QTableWidget, row: int):
+        gasto_id = tabla.item(row, 0).data(Qt.UserRole)
+    
+        if QMessageBox.question(
+            self,
+            "Eliminar gasto",
+            "¿Seguro que querés eliminar este gasto?",
+            QMessageBox.Yes | QMessageBox.No
+        ) != QMessageBox.Yes:
+            return
+    
+        try:
+            with conexion() as conn, conn.cursor() as cur:
+                cur.execute("DELETE FROM gastos WHERE id=%s", (gasto_id,))
+                conn.commit()
+        except Exception as e:
+            traceback.print_exc()
+            QMessageBox.critical(self, "Error", f"{e}")
+            return
+    
+        # eliminar de memoria
+        for etapa in self.trabajos:
+            etapa["gastos"] = [g for g in etapa["gastos"] if g["id"] != gasto_id]
+    
+        self._construir_secciones()
 
 if __name__ == "__main__":
     obra_id = 1

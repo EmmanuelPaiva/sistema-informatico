@@ -12,6 +12,7 @@ from PySide6.QtGui import QColor, QBrush, QFont
 from PySide6.QtCore import Qt, QDateTime
 from utils.utilsCompras import calcular_total_general
 from main.themes import themed_icon
+from utils.normNumbers import formatear_numero
 
 
 # -------------------- helpers internos --------------------
@@ -71,8 +72,8 @@ def actualizar_subtotal(row, ui, *__):
         cantidad = max(1, int(spin.value() or 1))
         subtotal = precio_unitario * cantidad
 
-        ui.tableWidget.setItem(row, 2, QTableWidgetItem(f"{precio_unitario:.2f}"))
-        ui.tableWidget.setItem(row, 3, QTableWidgetItem(f"{subtotal:.2f}"))
+        ui.tableWidget.setItem(row, 2, QTableWidgetItem(formatear_numero(precio_unitario)))
+        ui.tableWidget.setItem(row, 3, QTableWidgetItem(formatear_numero(subtotal)))
         calcular_total_general(ui)
     except Exception as e:
         print(f"[actualizar_subtotal] Error fila {row}: {e}")
@@ -102,10 +103,10 @@ def agrega_prodcuto_a_fila(ui_nueva_compra):
     ui_nueva_compra.tableWidget.setCellWidget(row, 1, spin)
 
     # precio / subtotal iniciales (no editables)
-    item_precio = QTableWidgetItem(); _set_ro(item_precio, "0.00")
+    item_precio = QTableWidgetItem(); _set_ro(item_precio, formatear_numero(0))
     ui_nueva_compra.tableWidget.setItem(row, 2, item_precio)
 
-    item_subtotal = QTableWidgetItem(); _set_ro(item_subtotal, "0.00")
+    item_subtotal = QTableWidgetItem(); _set_ro(item_subtotal, formatear_numero(0))
     ui_nueva_compra.tableWidget.setItem(row, 3, item_subtotal)
 
     # señales: ignoramos el parámetro extra con lambda *_:
@@ -113,7 +114,6 @@ def agrega_prodcuto_a_fila(ui_nueva_compra):
     spin.valueChanged.connect(lambda *_: actualizar_subtotal(row, ui_nueva_compra))
     combo.currentIndexChanged.connect(lambda *_: calcular_total_general(ui_nueva_compra))
     spin.valueChanged.connect(lambda *_: calcular_total_general(ui_nueva_compra))
-
 
 def reiniciar_tabla_productos(ui):
     ui.tableWidget.setRowCount(0)
@@ -168,7 +168,7 @@ def _validar_fila(ui_tbl, row):
         return False, "Hay filas con cantidad inválida."
 
     try:
-        precio_unitario = float(item_precio.text() or 0)
+        precio_unitario = float(item_precio.text().replace(".", "").replace(",", ".") or 0)
     except Exception:
         precio_unitario = 0.0
     if precio_unitario <= 0:
@@ -211,7 +211,7 @@ def SaveSellIntoDb(ui_nueva_venta, ui, form):
                 item_precio = ui_nueva_venta.tableWidget.item(r, 2)
                 id_producto = combo.currentData()
                 cantidad = int(spin.value())
-                precio_unitario = float(item_precio.text() or 0)
+                precio_unitario = float(item_precio.text().replace(".", "").replace(",", ".") or 0)
 
                 cur.execute("""
                     INSERT INTO compra_detalles (id_compra, id_producto, cantidad, precio_unitario)
@@ -222,6 +222,8 @@ def SaveSellIntoDb(ui_nueva_venta, ui, form):
         # Refrescar UI
         ui.treeWidget.clear()
         setRowsTreeWidget(ui, form)
+        if hasattr(ui, "_post_refresh"):
+            ui._post_refresh()
         ui.formulario_nueva_compra.close()
         print(f"Compra registrada con ID: {id_compra}")
 
@@ -269,7 +271,7 @@ def setRowsTreeWidget(ui, Form):
         fecha_txt = fecha.strftime("%Y-%m-%d %H:%M:%S") if hasattr(fecha, "strftime") else str(fecha)
         item_compra.setText(1, fecha_txt)
         item_compra.setText(2, str(proveedor))
-        item_compra.setText(3, f"{float(total):.2f}")
+        item_compra.setText(3, formatear_numero(total))
         item_compra.setText(4, str(medio))
         item_compra.setText(5, "Sí" if factura else "No")
         ui.treeWidget.addTopLevelItem(item_compra)
@@ -292,8 +294,8 @@ def setRowsTreeWidget(ui, Form):
             hijo = QTreeWidgetItem()
             hijo.setText(1, nombre)
             hijo.setText(2, str(cantidad))
-            hijo.setText(3, f"{float(precio):.2f}")
-            hijo.setText(4, f"{float(subtotal):.2f}")
+            hijo.setText(3, formatear_numero(precio))
+            hijo.setText(4, formatear_numero(subtotal))
             item_compra.addChild(hijo)
 
         # Botones
@@ -443,10 +445,10 @@ def editar_compra(item_compra, ui, Form, edicion=False):
         ui_nueva.tableWidget.setCellWidget(i, 0, combo)
         ui_nueva.tableWidget.setCellWidget(i, 1, spin)
 
-        item_precio = QTableWidgetItem(f"{float(precio_unitario):.2f}")
+        item_precio = QTableWidgetItem(formatear_numero(precio_unitario))
         _set_ro(item_precio, item_precio.text()); ui_nueva.tableWidget.setItem(i, 2, item_precio)
 
-        item_sub = QTableWidgetItem(f"{float(subtotal):.2f}")
+        item_sub = QTableWidgetItem(formatear_numero(subtotal))
         _set_ro(item_sub, item_sub.text()); ui_nueva.tableWidget.setItem(i, 3, item_sub)
 
         # conectar señales ignorando el parámetro extra
@@ -487,7 +489,11 @@ def actualizar_compra_en_db(ui_nueva_compra, id_compra, ui, Form):
                 spin  = ui_nueva_compra.tableWidget.cellWidget(r, 1)
                 id_producto = combo.currentData()
                 cantidad = int(spin.value())
-                precio_unitario = float(ui_nueva_compra.tableWidget.item(r, 2).text() or 0)
+                precio_unitario = float(
+                    ui_nueva_compra.tableWidget.item(r, 2).text()
+                    .replace(".", "")
+                    .replace(",", ".") or 0
+                )
 
                 cur.execute("""
                     INSERT INTO compra_detalles (id_compra, id_producto, cantidad, precio_unitario)
@@ -508,6 +514,8 @@ def actualizar_compra_en_db(ui_nueva_compra, id_compra, ui, Form):
 
         ui.treeWidget.clear()
         setRowsTreeWidget(ui, Form)
+        if hasattr(ui, "_post_refresh"):
+            ui._post_refresh()
         ui.formulario_nueva_compra.close()
         print(f"Compra {id_compra} actualizada correctamente.")
 

@@ -78,3 +78,27 @@ class UserCard(QFrame):
         """Emite la señal sólo si el id es válido."""
         if user_id is not None:
             self.clicked_view.emit(user_id)
+
+
+if __name__ == "__main__":
+    # Prueba rápida del componente
+    from PySide6.QtWidgets import QApplication, QVBoxLayout, QWidget
+
+    app = QApplication([])
+
+    demo_users = [
+        {"id": 1, "username": "jdoe", "full_name": "John Doe"},
+        {"id": 2, "username": "asmith", "full_name": "Alice Smith"},
+        {"id": 3, "username": "bwayne", "full_name": "Bruce Wayne"},
+    ]
+
+    main_win = QWidget()
+    main_layout = QVBoxLayout(main_win)
+
+    for u in demo_users:
+        chip = UserCard(u)
+        chip.clicked_view.connect(lambda uid: print(f"Ver info usuario ID: {uid}"))
+        main_layout.addWidget(chip)
+
+    main_win.show()
+    app.exec()

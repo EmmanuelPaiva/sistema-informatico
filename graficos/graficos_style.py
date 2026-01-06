@@ -23,8 +23,28 @@ GRID_COLOR  = "#E2E8F0"
 GRID_ALPHA  = 0.45
 FONT_STACK  = "Segoe UI, Inter, DejaVu Sans, Arial"
 
+BASE_DPI = 96
+
 RADIUS      = 16
 PADDING     = 16
+
+def disable_layout_engine(fig):
+    """Desactiva cualquier layout engine para permitir subplots_adjust sin warnings."""
+    if fig is None:
+        return
+    try:
+        getter = getattr(fig, "get_layout_engine", None)
+        if callable(getter):
+            engine = getter()
+            if engine != "none":
+                fig.set_layout_engine("none")
+            return
+    except Exception:
+        pass
+    try: fig.set_constrained_layout(False)
+    except Exception: pass
+    try: fig.set_tight_layout(False)
+    except Exception: pass
 
 # ========= APLICAR TEMA GLOBAL =========
 def apply_rodler_chart_style() -> None:
@@ -33,6 +53,8 @@ def apply_rodler_chart_style() -> None:
     INK_MAIN = "#0F172A"; INK_SOFT = "#64748B"; INK_MUTE = "#94A3B8"
     BG = "#FFFFFF"; GRID_COLOR = "#E2E8F0"; GRID_ALPHA = 0.45
     plt.rcParams.update({
+        "figure.dpi": BASE_DPI,
+        "savefig.dpi": BASE_DPI,
         "font.family": "sans-serif",
         "font.sans-serif": [s.strip() for s in FONT_STACK.split(",")],
 
@@ -56,7 +78,8 @@ def apply_rodler_chart_style() -> None:
         "ytick.labelsize": 11,
         "legend.frameon": False,
 
-        "figure.autolayout": True,
+        "figure.autolayout": False,
+        "figure.constrained_layout.use": False,
         "axes.spines.top": False,
         "axes.spines.right": False,
     })
@@ -68,6 +91,8 @@ def apply_rodler_chart_style_dark() -> None:
     INK_MAIN = "#E5E7EB"; INK_SOFT = "#9CA3AF"; INK_MUTE = "#94A3B8"
     BG = "#0F172A"; GRID_COLOR = "#1F2A44"; GRID_ALPHA = 0.55
     plt.rcParams.update({
+        "figure.dpi": BASE_DPI,
+        "savefig.dpi": BASE_DPI,
         "font.family": "sans-serif",
         "font.sans-serif": [s.strip() for s in FONT_STACK.split(",")],
 
@@ -91,7 +116,8 @@ def apply_rodler_chart_style_dark() -> None:
         "ytick.labelsize": 11,
         "legend.frameon": False,
 
-        "figure.autolayout": True,
+        "figure.autolayout": False,
+        "figure.constrained_layout.use": False,
         "axes.spines.top": False,
         "axes.spines.right": False,
     })
@@ -170,7 +196,13 @@ def short_label(s: str, width: int = 24) -> str:
     return textwrap.shorten(str(s), width=width, placeholder="…")
 
 def tight_fig(fig: plt.Figure, pad: float = 0.8) -> None:
+    """Ajuste seguro: respeta márgenes personalizados y evita motores automáticos."""
+    if fig is None:
+        return
+    if getattr(fig, "_rodler_custom_margins", False):
+        return
     try:
+        disable_layout_engine(fig)
         fig.tight_layout(pad=pad)
     except Exception:
         pass
@@ -317,14 +349,14 @@ def donut_willow(ax, percent_text: str, values, labels, colors=None):
         labels=None,
         startangle=90,
         colors=colors[:len(vals)],
-        wedgeprops=dict(width=0.48, edgecolor="white"),  # aro más ancho
+        wedgeprops=dict(width=0.44, edgecolor="white"),  # aro más ancho
         radius=1.05,                                     # donut ligeramente mayor
         autopct=None,
         normalize=True
     )[0]
 
     # Centro vacío
-    ax.add_artist(plt.Circle((0, 0), 0.58, fc=BG))
+    ax.add_artist(plt.Circle((0, 0), 0.60, fc=BG))
     ax.set_aspect("equal")
 
     # Mucho menos margen para que el donut crezca
@@ -398,13 +430,13 @@ def donut(ax, labels, values, center_label: str = "", colors: Optional[Sequence[
         labels=None,
         startangle=90,
         colors=colors[:len(vals)],
-        wedgeprops=dict(width=0.42, edgecolor="white"),
+        wedgeprops=dict(width=0.44, edgecolor="white"),
         autopct=None,
         normalize=True
     )[0]
 
     # Fondo interno y centrado
-    ax.add_artist(plt.Circle((0, 0), 0.58, fc=BG))
+    ax.add_artist(plt.Circle((0, 0), 0.60, fc=BG))
     ax.set_aspect("equal")
     ax.margins(0.22)
 

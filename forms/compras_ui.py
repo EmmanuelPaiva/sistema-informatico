@@ -1,11 +1,11 @@
 import sys, os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from PySide6.QtCore import QCoreApplication, QRect, Qt, QPropertyAnimation, QObject, QEvent, QTimer, QDate, QDateTime
+from PySide6.QtCore import QCoreApplication, QRect, Qt, QPropertyAnimation, QObject, QEvent, QTimer, QDate, QDateTime, QSize
 from PySide6.QtGui import QIcon, QFont
 from PySide6.QtWidgets import (
     QApplication, QFrame, QGridLayout, QLabel, QPushButton, QVBoxLayout, QWidget,
-    QTreeWidget, QHeaderView, QHBoxLayout, QFileDialog, QMessageBox, QLineEdit,
+    QTreeWidget, QTreeWidgetItem, QHeaderView, QHBoxLayout, QFileDialog, QMessageBox, QLineEdit,
     QSizePolicy, QListView, QDateEdit, QDateTimeEdit
 )
 
@@ -20,9 +20,11 @@ from reports.excel import export_qtree_to_excel
 from forms.ui_helpers import apply_global_styles, mark_title, make_primary, style_search
 from main.themes import themed_icon
 
-ROW_HEIGHT = 60
+ROW_HEIGHT = 46
 BTN_MIN_HEIGHT = 32
 OPCIONES_COL = 6
+OPCIONES_MIN_WIDTH = 140
+ROLE_DETAILS_LOADED = Qt.UserRole + 101
 
 def icon(name: str) -> QIcon:
     return themed_icon(name)
@@ -34,9 +36,14 @@ class _ResizeWatcher(QObject):
         return False
 
 class _ParentResizeWatcher(QObject):
-    def __init__(self, ui): super().__init__(); self.ui = ui
+    def __init__(self, ui):
+        super().__init__()
+        self.ui = ui
     def eventFilter(self, obj, event):
-        if event.type() == QEvent.Resize: self.ui._sync_form_geometry()
+        if event.type() == QEvent.Resize:
+            self.ui._sync_form_geometry()
+        if event.type() in (QEvent.PaletteChange, QEvent.StyleChange):
+            QTimer.singleShot(0, self.ui._reapply_theme_dependent_styles)
         return False
 
 class Ui_Form(object):
@@ -58,7 +65,7 @@ class Ui_Form(object):
         hl.setContentsMargins(16, 12, 16, 12)
         hl.setSpacing(10)
 
-        self.labelCompras = QLabel("Compras", self.headerCard)
+        self.labelCompras = QLabel("compras", self.headerCard)
         self.labelCompras.setObjectName("comprasTitle")
         self.labelCompras.setProperty("role", "pageTitle")
         f = QFont(self.labelCompras.font())
@@ -113,6 +120,7 @@ class Ui_Form(object):
         self.treeWidget = QTreeWidget(self.tableCard)
         tv.addWidget(self.treeWidget)
         self.gridLayout.addWidget(self.tableCard, 1, 0, 1, 1)
+
         self.treeWidget.setColumnCount(7)
         self.treeWidget.setHeaderLabels(["ID", "Fecha", "Proveedor", "Total", "Medio", "Factura", "Opciones"])
         self.treeWidget.setEditTriggers(QTreeWidget.NoEditTriggers)
@@ -120,19 +128,10 @@ class Ui_Form(object):
         self.treeWidget.setUniformRowHeights(True)
         self.treeWidget.setIndentation(0)
         self.treeWidget.setColumnHidden(0, True)
-        self.treeWidget.setStyleSheet(
-            f"""
-            QTreeWidget::item {{
-                height: {ROW_HEIGHT}px;
-                border-bottom: 1px solid palette(mid);
-                margin-left: 24px;
-                margin-right: 24px;
-            }}
-            QTreeWidget::item:selected {{
-                border-bottom: 1px solid palette(mid);
-            }}
-            """
-        )
+        self.treeWidget.setSelectionBehavior(QTreeWidget.SelectRows)
+        self.treeWidget.setAllColumnsShowFocus(True)
+        self.treeWidget.setStyleSheet(f"QTreeWidget::item{{height:{ROW_HEIGHT}px;}}")
+
         header = self.treeWidget.header()
         header.setHighlightSections(False)
         header.setStretchLastSection(False)
@@ -140,13 +139,22 @@ class Ui_Form(object):
         for col in (1, 2, 3, 4, 5):
             header.setSectionResizeMode(col, QHeaderView.Stretch)
         header.setSectionResizeMode(OPCIONES_COL, QHeaderView.ResizeToContents)
+        try:
+            header.setDefaultAlignment(Qt.AlignCenter)
+        except Exception:
+            pass
+
+        apply_global_styles(Form)
+
         self._center_header()
         self.searchBox.textChanged.connect(self._filtrar)
+        self.treeWidget.itemDoubleClicked.connect(self._on_item_double_clicked)
+
         self._resizeWatcher = _ResizeWatcher(self)
         self.treeWidget.installEventFilter(self._resizeWatcher)
         self._parentWatcher = _ParentResizeWatcher(self)
         Form.installEventFilter(self._parentWatcher)
-        apply_global_styles(Form)
+
         self.labelCompras.setStyleSheet("""
             #comprasTitle {
                 font-size: 32px;
@@ -156,9 +164,11 @@ class Ui_Form(object):
         """)
         self.labelCompras.style().unpolish(self.labelCompras)
         self.labelCompras.style().polish(self.labelCompras)
+
         self.retranslateUi(Form)
         setRowsTreeWidget(self, Form)
         self._post_refresh()
+        QTimer.singleShot(0, self._post_refresh)
 
     def retranslateUi(self, Form):
         Form.setWindowTitle(QCoreApplication.translate("Form", "Compras", None))
@@ -205,11 +215,13 @@ class Ui_Form(object):
             if combo is not None:
                 combo.setContentsMargins(0, 0, 0, 0)
                 combo.setMinimumHeight(36)
+                combo.setStyleSheet("")
                 self._fix_combo_popup(combo)
             spin = tw.cellWidget(r, 1)
             if spin is not None:
                 spin.setContentsMargins(0, 0, 0, 0)
                 spin.setMinimumHeight(36)
+                spin.setStyleSheet("")
                 spin.setStyleSheet("QAbstractSpinBox{ background: palette(base); color: palette(text); }")
         prev = tw.styleSheet() or ""
         tw.setStyleSheet(prev + "\nQTableWidget::item{ padding: 0; margin: 0; }\n")
@@ -220,6 +232,15 @@ class Ui_Form(object):
             return
         tw.setMinimumHeight(260)
         self._style_form_cell_widgets(ui_form)
+
+    def _restyle_form_tables(self):
+        targets = []
+        if hasattr(self, "ui_nueva_compra"):
+            targets.append(getattr(self, "ui_nueva_compra", None))
+        for form_ui in targets:
+            if form_ui is None:
+                continue
+            self._style_form_cell_widgets(form_ui)
 
     def _sync_form_geometry(self):
         if not hasattr(self, 'formulario_nueva_compra') or not self.formulario_nueva_compra.isVisible():
@@ -240,6 +261,18 @@ class Ui_Form(object):
             self.anim.setEndValue(QRect(Form.width(), 0, w, h))
             self.anim.finished.connect(self.formulario_nueva_compra.close)
             self.anim.start()
+    
+    # === REFRESH ===
+    def refrescar(self):
+        """
+        Refresca completamente el módulo de Compras
+        """
+        try:
+            self.searchBox.clear()
+            setRowsTreeWidget(self, self._host)
+            self._post_refresh()
+        except Exception as e:
+            print(f"[Compras.refrescar] Error: {e}")
 
     def abrir_formulario_nueva_compra(self, Form, edicion=False):
         if hasattr(self, 'formulario_nueva_compra') and self.formulario_nueva_compra.isVisible():
@@ -321,7 +354,14 @@ class Ui_Form(object):
     def _post_refresh(self):
         self._ajustar_columnas()
         self._center_cells()
-        self._iconize_option_buttons()
+        self._neutralize_option_buttons()
+        self._restyle_form_tables()
+        try:
+            current_width = self.treeWidget.columnWidth(OPCIONES_COL)
+            if current_width < OPCIONES_MIN_WIDTH:
+                self.treeWidget.setColumnWidth(OPCIONES_COL, OPCIONES_MIN_WIDTH)
+        except Exception:
+            pass
 
     def _ajustar_columnas(self):
         header = self.treeWidget.header()
@@ -347,35 +387,108 @@ class Ui_Form(object):
                     lay.setContentsMargins(0, 0, 0, 0)
                     lay.setAlignment(Qt.AlignCenter)
 
-    def _iconize_option_buttons(self):
+    def _neutralize_option_buttons(self):
         for i in range(self.treeWidget.topLevelItemCount()):
             item = self.treeWidget.topLevelItem(i)
             w = self.treeWidget.itemWidget(item, OPCIONES_COL)
             if not w:
                 continue
             for btn in w.findChildren(QPushButton):
-                lower = (btn.text() or "").lower()
-                if "edit" in lower or "editar" in lower:
-                    btn.setProperty("type", "icon")
-                    btn.setProperty("variant", "edit")
-                    btn.setIcon(icon("edit"))
-                    btn.setText("")
-                    btn.setToolTip("Editar compra")
-                elif "del" in lower or "elimin" in lower or "borrar" in lower:
-                    btn.setProperty("type", "icon")
-                    btn.setProperty("variant", "delete")
-                    btn.setIcon(icon("trash"))
-                    btn.setText("")
-                    btn.setToolTip("Eliminar compra")
-                else:
-                    continue
                 btn.setCursor(Qt.PointingHandCursor)
-                btn.style().unpolish(btn)
-                btn.style().polish(btn)
+                btn.setMinimumHeight(BTN_MIN_HEIGHT)
+                btn.setStyleSheet("QPushButton{background: transparent; border: none; color: palette(text);} QPushButton:disabled{opacity:0.6;}")
+                btn.style().unpolish(btn); btn.style().polish(btn)
             lay = w.layout()
             if lay:
                 lay.setContentsMargins(0, 0, 0, 0)
                 lay.setAlignment(Qt.AlignCenter)
+
+    def _reapply_theme_dependent_styles(self):
+        self._neutralize_option_buttons()
+        self._restyle_form_tables()
+
+    def _on_item_double_clicked(self, item: QTreeWidgetItem, column: int):
+        if item is None:
+            return
+        if item.parent() is not None:
+            return
+        if item.data(0, ROLE_DETAILS_LOADED):
+            item.setExpanded(not item.isExpanded())
+            return
+        ok = self._cargar_detalles_compra(item)
+        if ok:
+            item.setData(0, ROLE_DETAILS_LOADED, True)
+            item.setExpanded(True)
+
+    def _format_money(self, value):
+        try:
+            return f"Gs. {float(value):,.0f}".replace(",", ".")
+        except Exception:
+            return str(value)
+
+    def _cargar_detalles_compra(self, item_compra: QTreeWidgetItem) -> bool:
+        compra_id = (item_compra.text(0) or "").strip()
+        if not compra_id:
+            return False
+        detalles = None
+        try:
+            with conexion() as c, c.cursor() as cur:
+                try:
+                    cur.execute("""
+                        SELECT p.nombre, cd.cantidad, cd.precio_unitario, (cd.cantidad * cd.precio_unitario) AS subtotal
+                        FROM compras_detalle cd
+                        JOIN productos p ON p.id_producto = cd.id_producto
+                        WHERE cd.id_compra = %s
+                        ORDER BY p.nombre;
+                    """, (compra_id,))
+                    detalles = cur.fetchall()
+                except Exception:
+                    detalles = None
+                if not detalles:
+                    try:
+                        cur.execute("""
+                            SELECT descripcion, cantidad, precio, (cantidad*precio) AS subtotal
+                            FROM compras_detalle
+                            WHERE id_compra = %s
+                            ORDER BY 1;
+                        """, (compra_id,))
+                        detalles = cur.fetchall()
+                    except Exception:
+                        detalles = None
+                if not detalles:
+                    try:
+                        cur.execute("""
+                            SELECT COALESCE(nombre, descripcion) AS desc, COALESCE(cantidad, 1) AS cant,
+                                   COALESCE(precio_unitario, precio, 0) AS pu,
+                                   COALESCE(subtotal, COALESCE(cantidad,1)*COALESCE(precio_unitario, precio,0)) AS subtotal
+                            FROM compras_detalle
+                            WHERE id_compra = %s
+                            ORDER BY 1;
+                        """, (compra_id,))
+                        detalles = cur.fetchall()
+                    except Exception:
+                        detalles = []
+        except Exception:
+            detalles = []
+        if detalles is None:
+            detalles = []
+        for fila in detalles:
+            try:
+                nombre = str(fila[0])
+                cant = fila[1]
+                pu = fila[2]
+                sub = fila[3]
+            except Exception:
+                nombre = str(fila[0]) if len(fila) > 0 else ""
+                cant = fila[1] if len(fila) > 1 else ""
+                pu = fila[2] if len(fila) > 2 else ""
+                sub = fila[3] if len(fila) > 3 else ""
+            child = QTreeWidgetItem(item_compra, ["", "", f"• {nombre}", self._format_money(sub), "", "", ""])
+            child.setFirstColumnSpanned(True)
+            child.setTextAlignment(2, Qt.AlignLeft | Qt.AlignVCenter)
+            child.setTextAlignment(3, Qt.AlignCenter)
+            self.treeWidget.setItemWidget(child, OPCIONES_COL, QWidget())
+        return len(detalles) > 0
 
     def _set_today_default_date(self):
         today = QDate.currentDate()

@@ -271,11 +271,17 @@ QPushButton[type="icon"][variant="edit"], QToolButton[type="icon"][variant="edit
 QPushButton[type="icon"][variant="edit"]:hover, QToolButton[type="icon"][variant="edit"]:hover {
   background:#C7DAFF; color:#0847C5;
 }
+QPushButton[type="icon"][variant="edit"]:disabled, QToolButton[type="icon"][variant="edit"]:disabled {
+  background:#E5ECFF; color:#9AAAF5;
+}
 QPushButton[type="icon"][variant="delete"], QToolButton[type="icon"][variant="delete"] {
   background:#FFE4E6; color:#E11D48;
 }
 QPushButton[type="icon"][variant="delete"]:hover, QToolButton[type="icon"][variant="delete"]:hover {
   background:#FFD5D9; color:#B91C1C;
+}
+QPushButton[type="icon"][variant="delete"]:disabled, QToolButton[type="icon"][variant="delete"]:disabled {
+  background:#FFECEF; color:#F29AB0;
 }
 
 /* =================== TABLAS / LISTAS =================== */
@@ -299,6 +305,30 @@ QTableWidget QWidget, QTreeWidget QWidget { background:transparent; border:none;
 }
 /* Contenedores marcados como 'transparent' para remover cualquier fondo/sombra */
 QFrame#transparent, QWidget#transparent { background: transparent; border: none; }
+
+/* === Tarjetas de gráficos Plotly === */
+QFrame[role="plotlycard"] {
+    background: #FFFFFF;
+    border: 1px solid #E8EEF6;
+    border-radius: 14px;
+    padding: 10px;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.2s ease;
+}
+
+QFrame[role="plotlycard"]:hover {
+    border: 1px solid #2979FF;
+    box-shadow: 0 0 12px rgba(41,121,255,0.25);
+    transform: translateY(-2px);
+}
+
+/* Título de cada card */
+QLabel[role="cardtitle"] {
+    color: #0F172A;
+    font-weight: 600;
+    font-size: 15px;
+    padding-left: 6px;
+    margin-bottom: 6px;
+}
 """
 
 QSS_RODLER_DARK = """
@@ -460,11 +490,17 @@ QPushButton[type="icon"][variant="edit"], QToolButton[type="icon"][variant="edit
 QPushButton[type="icon"][variant="edit"]:hover, QToolButton[type="icon"][variant="edit"]:hover {
   background:#1B4C91; color:#E5F0FF;
 }
+QPushButton[type="icon"][variant="edit"]:disabled, QToolButton[type="icon"][variant="edit"]:disabled {
+  background:#233d6e; color:#8CA8E8;
+}
 QPushButton[type="icon"][variant="delete"], QToolButton[type="icon"][variant="delete"] {
   background:#5A1020; color:#FFD1D9;
 }
 QPushButton[type="icon"][variant="delete"]:hover, QToolButton[type="icon"][variant="delete"]:hover {
   background:#701A2C; color:#FFE4E8;
+}
+QPushButton[type="icon"][variant="delete"]:disabled, QToolButton[type="icon"][variant="delete"]:disabled {
+  background:#441220; color:#F3A8BB;
 }
 
 /* =================== TABLAS / LISTAS =================== */
@@ -487,4 +523,53 @@ QTableWidget QWidget, QTreeWidget QWidget { background:transparent; border:none;
 }
 /* Contenedores marcados como 'transparent' para remover cualquier fondo/sombra */
 QFrame#transparent, QWidget#transparent { background: transparent; border: none; }
+
+QFrame[role="plotlycard"] {
+    background: #0F172A;
+    border: 1px solid #1F2A44;
+    border-radius: 14px;
+    padding: 10px;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.2s ease;
+}
+
+QFrame[role="plotlycard"]:hover {
+    border: 1px solid #60A5FA;
+    box-shadow: 0 0 14px rgba(96,165,250,0.25);
+    transform: translateY(-2px);
+}
+
+/* Título de cada card */
+QLabel[role="cardtitle"] {
+    color: #E5E7EB;
+    font-weight: 600;
+    font-size: 15px;
+    padding-left: 6px;
+    margin-bottom: 6px;
+}
+
+/*estilos para el formulario de nuevo usuario */
+QWidget#card {
+    border-radius: 12px;
+}
+
+QLabel#titleLabel {
+    font-size: 20px;
+    font-weight: 600;
+}
+
+QPushButton#btn_toggle_pw {
+    background: transparent;
+    border: none;
+}
+
+QPushButton#btn_toggle_pw:hover {
+    background: rgba(100, 100, 100, 0.12);
+    border-radius: 6px;
+}
+
+QPushButton#btn_primary {
+    padding: 6px 16px;
+    font-weight: 500;
+}
+
 """

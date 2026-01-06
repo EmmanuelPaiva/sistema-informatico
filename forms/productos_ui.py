@@ -20,7 +20,8 @@ from db.conexion import conexion
 from reports.excel import export_qtable_to_excel
 
 from forms.ui_helpers import (
-    apply_global_styles, mark_title, make_primary, make_danger, style_table, style_search
+    apply_global_styles, mark_title, make_primary, make_danger,
+    style_table, style_search, style_edit_button, style_delete_button
 )
 
 OPCIONES_MIN_WIDTH = 140
@@ -129,20 +130,13 @@ class _ResizeWatcher(QObject):
         return False
 
 def _style_action_button(btn: QPushButton, kind: str):
-    btn.setText("")
     btn.setCursor(Qt.PointingHandCursor)
     btn.setMinimumHeight(BTN_MIN_HEIGHT)
     btn.setIconSize(QSize(ICON_PX, ICON_PX))
-    btn.setProperty("type", "icon")
     if kind == "edit":
-        btn.setProperty("variant", "edit")
-        btn.setIcon(icon("edit"))
-        btn.setToolTip("Editar producto")
+        style_edit_button(btn, "Editar producto")
     else:
-        btn.setProperty("variant", "delete")
-        btn.setIcon(icon("trash"))
-        btn.setToolTip("Eliminar producto")
-    btn.style().unpolish(btn); btn.style().polish(btn)
+        style_delete_button(btn, "Eliminar producto")
 
 class Ui_Form(object):
     def setupUi(self, Form):
@@ -161,7 +155,7 @@ class Ui_Form(object):
         self.headerLayout.setSpacing(10)
 
         self.label = QLabel(self.headerFrame)
-        self.label.setText("Productos")
+        self.label.setText("productos")
         self.label.setObjectName("productosTitle")
         self.label.setProperty("role", "pageTitle")
         mark_title(self.label)
@@ -404,6 +398,12 @@ class Ui_Form(object):
             self._colocar_botones_opciones(row_count, producto[0])
         self._post_refresh_table()
 
+    def refrescar(self):
+        """
+        Refresca completamente el módulo de productos
+        """
+        self.searchBox.clear()
+        self.cargar_todos_los_productos()
     def _colocar_botones_opciones(self, fila: int, id_producto: int):
         contenedor = QWidget()
         layout = QHBoxLayout(contenedor)

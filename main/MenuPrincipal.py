@@ -13,40 +13,29 @@ from PySide6.QtWidgets import (
     QCheckBox, QApplication, QMessageBox, QDialog
 )
 from PySide6.QtSvg import QSvgRenderer
-
-# === Temas ===
-from main.themes  import QSS_RODLER_LIGHT, QSS_RODLER_DARK
-
-# === Módulos de tu app ===
+from main.themes  import QSS_RODLER_LIGHT, QSS_RODLER_DARK, is_dark_mode
 from forms.productos_ui import Ui_Form as ProductosForm
 from forms.compras_ui import Ui_Form as ComprasForm
 from forms.Obras_ui import ObrasWidget
 from forms.Ventas_ui import Ui_Form as VentasForm
 from forms.Clientes_ui import Ui_Form as ClientesForm
 from forms.Proveedores_ui import Ui_Form as ProveedoresForm
-from forms.users_panel import UsersListWindow  # panel de info de usuarios
-
-# === Gráficos ===
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from forms.users_panel import UsersListWindow
 from sqlalchemy import text
-from graficos.graficos_dashboard import (
+from plotly.io import to_html
+from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtCore import QUrl
+from graficos.graficos_dashboard2 import (
     get_engine,
-    create_ventas_vs_compras_mensuales,
-    create_gastos_mensuales,
-    create_presupuesto_vs_gasto_por_obra,
-    create_distribucion_gastos_por_tipo,
-    create_stock_critico,
-    create_top_materiales_mes,
+    create_ventas_vs_compras_plotly,
+    create_gastos_mensuales_plotly,
+    create_presupuesto_vs_gasto_plotly,
+    create_gastos_por_tipo_plotly,
+    fig_to_html,
 )
 from graficos import graficos_style as gs
-
-# === Clima ===
 from forms.weather_panel import DashboardWeatherPanel
 
-
-# =========================
-#   OPTIMIZACIONES CLAVE
-# =========================
 _ENGINE_SINGLETON = None
 def _get_engine_cached():
     global _ENGINE_SINGLETON
@@ -86,10 +75,7 @@ _SQL_KPI_CRITICOS = text("""
     SELECT COUNT(*) FROM productos WHERE COALESCE(stock_actual,0) <= COALESCE(stock_minimo,0)
 """)
 
-
-# ---------------- Iconos ----------------
 _THIS_DIR = os.path.dirname(__file__)
-# FIX: nombre correcto de carpeta relativa de íconos
 _REL_ICONS = os.path.normpath(os.path.join(_THIS_DIR, "..", "rodlerIcons"))
 ABS_FALLBACK = r"C:\Users\mauri\OneDrive\Desktop\sistema-informatico\rodlerIcons"
 ICONS_BASE = _REL_ICONS if os.path.isdir(_REL_ICONS) else ABS_FALLBACK
@@ -128,7 +114,6 @@ def _load_icon(key: str) -> tuple[QIcon, str]:
     }.get(key, "")
     return QIcon(), fallback_txt
 
-# --- Tintado SVG ---
 _SVG_TINT_CACHE: dict[tuple[str, int, int, int, int, int, int], QIcon] = {}
 def svg_icon_tinted(svg_path: str, color: QColor, size: QSize) -> QIcon:
     if not svg_path or not os.path.exists(svg_path): return QIcon()
@@ -166,12 +151,9 @@ NAV_ITEMS = [
 EXPANDED_WIDTH = 240
 COLLAPSED_WIDTH = 72
 ICON_SIZE = QSize(18, 18)
-
-# ===== Ajustes visuales =====
 CHIP_MIN_WIDTH = 230
 POPUP_RIGHT_FIX = 1
 
-# ===== Permisos =====
 def _session_roles_perms(session: dict) -> tuple[set[str], set[str]]:
     return set((session or {}).get("roles") or []), set((session or {}).get("perms") or [])
 
@@ -205,7 +187,6 @@ ACTION_BUTTONS_BY_MODULE = {
     "Proveedores": {"create": ["btnProveedorNuevo", "btnAceptarProveedor"], "update": ["btnProveedorEditar"], "delete": ["btnProveedorEliminar"]},
 }
 
-# ---------------- Helpers ----------------
 def _circle_pix(color="#2979FF", diameter=34, text=""):
     pm = QPixmap(diameter, diameter); pm.fill(Qt.transparent)
     p = QPainter(pm); p.setRenderHints(QPainter.Antialiasing, True)
@@ -227,16 +208,13 @@ def _resolver_user_fields(session: dict) -> tuple[str, str]:
     role = (user.get("role") or user.get("rol") or user.get("user_role") or "Usuario").strip() or "Usuario"
     return display, role
 
-
 class _FuncWorker(QObject):
-    finished = Signal(object, object)  
-
+    finished = Signal(object, object)
     def __init__(self, fn, *args, **kwargs):
         super().__init__()
         self._fn = fn
         self._args = args
         self._kwargs = kwargs
-
     @Slot()
     def run(self):
         try:
@@ -245,8 +223,6 @@ class _FuncWorker(QObject):
         except Exception as e:
             self.finished.emit(None, e)
 
-
-# ======================= Widgets =======================
 class KpiTile(QFrame):
     def __init__(self, title: str, icon: str = "📊", accent=None, parent=None, show_icon: bool = True):
         super().__init__(parent)
@@ -254,24 +230,18 @@ class KpiTile(QFrame):
         self.setProperty("class", "kpiTile")
         if accent == "blue":
             self.setProperty("accent", "blue")
-
         lay = QVBoxLayout(self); lay.setContentsMargins(16, 14, 16, 14); lay.setSpacing(6)
         row = QHBoxLayout(); row.setSpacing(10)
-
         self.icon = QLabel(icon)
         self.icon.setVisible(show_icon)
         if show_icon: row.addWidget(self.icon)
-
         self.title = QLabel(title); self.title.setProperty("role", "subtitle")
         row.addWidget(self.title); row.addStretch(1); lay.addLayout(row)
-
         self.value = QLabel("—"); self.value.setProperty("role", "value"); lay.addWidget(self.value)
         self.note = QLabel(""); self.note.setProperty("role", "subtitle"); lay.addWidget(self.note)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-
     def set_value(self, text: str, note: str = ""):
         self.value.setText(text); self.note.setText(note)
-
     def apply_kpi_theme(self, dark: bool):
         fam = "'Poppins', 'Segoe UI', 'Nunito Sans', sans-serif"
         if dark:
@@ -280,7 +250,6 @@ class KpiTile(QFrame):
         else:
             c_title = "#1E293B"; c_value = "#0F172A"; c_note  = "#64748B"; c_icon  = "#1E293B"
             card_bg = "#FFFFFF"; card_bd = "rgba(0,0,0,0.08)"
-
         self.setStyleSheet(f"""
             QFrame#tarjetaDashboard {{
                 background: {card_bg};
@@ -294,189 +263,14 @@ class KpiTile(QFrame):
         self.value.setStyleSheet(f"font-family:{fam}; font-size:28px; font-weight:600; color:{c_value};")
         self.note.setStyleSheet(f"font-family:{fam}; font-size:13px; font-weight:400; color:{c_note};")
 
-
 _CHART_WRAPPER_MIN_H = 240
-_CHART_CANVAS_MIN_H = 220
 _CHART_MAX_H = 520
 _CHART_CANVAS_MARGIN = 24
 
 
-def _reset_figure_geometry(fig):
-    """Restore the original inch size saved on the Matplotlib figure to avoid cumulative growth."""
-    if fig is None:
-        return
-    try:
-        base = getattr(fig, "_rodler_base_inches", None)
-        if base is None:
-            setattr(fig, "_rodler_base_inches", tuple(fig.get_size_inches()))
-        else:
-            fig.set_size_inches(base, forward=False)
-    except Exception:
-        pass
 
-
-class ChartCard(QFrame):
-    def __init__(self, title:str, parent=None):
-        super().__init__(parent); self.setObjectName("tarjetaDashboard")
-        # Compacto pero flexible: ocupa el alto disponible cuando hay espacio extra
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.setMinimumHeight(_CHART_WRAPPER_MIN_H)
-        self.setMaximumHeight(_CHART_MAX_H)
-
-        lay = QVBoxLayout(self); lay.setContentsMargins(16,16,16,16); lay.setSpacing(8)
-        self.lbl = QLabel(title); self.lbl.setProperty("role","cardtitle"); self.lbl.setStyleSheet("background: transparent;")
-        lay.addWidget(self.lbl)
-        self.container = QWidget(self); self.container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.container.setMinimumHeight(_CHART_CANVAS_MIN_H)
-        self.container.setMaximumHeight(_CHART_MAX_H)
-        cl = QVBoxLayout(self.container); cl.setContentsMargins(0,0,0,0); cl.setSpacing(0)
-        lay.addWidget(self.container, 1)
-        self.canvas = None
-        self._resize_timer = QTimer(self); self._resize_timer.setSingleShot(True); self._resize_timer.setInterval(50)
-        self._resize_timer.timeout.connect(self._redraw)
-
-    def set_figure(self, fig):
-        lc = self.container.layout()
-        while lc.count():
-            item = lc.takeAt(0)
-            if item.widget(): item.widget().deleteLater()
-        _reset_figure_geometry(fig)
-        self.canvas = FigureCanvas(fig)
-        # Permite que el grafico crezca sin superar el maximo fijado para la tarjeta
-        self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.canvas.setMinimumHeight(_CHART_CANVAS_MIN_H)
-        self.canvas.setMaximumHeight(_CHART_MAX_H - _CHART_CANVAS_MARGIN)
-        lc.addWidget(self.canvas)
-        self.restyle()
-        self._redraw()
-
-    def restyle(self):
-        if self.canvas:
-            try: gs.restyle_figure(self.canvas.figure)
-            except Exception: pass
-
-    def resizeEvent(self, ev):
-        super().resizeEvent(ev)
-        if self.canvas: self._resize_timer.start()
-
-    def _redraw(self):
-        try:
-            if self.canvas: self.canvas.draw_idle()
-        except Exception:
-            pass
-
-
-class ChartCarousel(QFrame):
-    def __init__(self, title: str, parent=None, autorotate_ms: int = 7000):
-        super().__init__(parent)
-        self.setObjectName("tarjetaDashboard")
-        # Igual que ChartCard
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.setMinimumHeight(_CHART_WRAPPER_MIN_H)
-        self.setMaximumHeight(_CHART_MAX_H)
-
-        root = QVBoxLayout(self); root.setContentsMargins(16, 16, 16, 16); root.setSpacing(8)
-        header = QHBoxLayout()
-        self.lbl = QLabel(title); self.lbl.setProperty("role", "cardtitle"); self.lbl.setStyleSheet("background: transparent;")
-        header.addWidget(self.lbl); header.addStretch(1)
-        self.btn_prev = QPushButton("‹"); self.btn_prev.setObjectName("carouselBtn")
-        self.btn_next = QPushButton("›"); self.btn_next.setObjectName("carouselBtn")
-        for btn in (self.btn_prev, self.btn_next):
-            btn.setCursor(Qt.PointingHandCursor); btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        header.addWidget(self.btn_prev); header.addWidget(self.btn_next); root.addLayout(header)
-        if not (title or "").strip(): self.lbl.hide()
-
-        self.stack = QStackedWidget(self); self.stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.stack.setMinimumHeight(_CHART_CANVAS_MIN_H)
-        self.stack.setMaximumHeight(_CHART_MAX_H)
-        root.addWidget(self.stack, 1)
-
-        self.dots = QLabel(); self.dots.setAlignment(Qt.AlignCenter); root.addWidget(self.dots)
-
-        self.btn_prev.clicked.connect(self.prev)
-        self.btn_next.clicked.connect(self.next)
-        self.timer = QTimer(self)
-        if autorotate_ms:
-            self.timer.setInterval(autorotate_ms)
-            self.timer.timeout.connect(self.next)
-            self.timer.start()
-
-        self._resize_timer = QTimer(self); self._resize_timer.setSingleShot(True); self._resize_timer.setInterval(50)
-        self._resize_timer.timeout.connect(self._redraw_current)
-
-        self._update_dots(); self._update_dot_style()
-
-    def set_figures(self, figures):
-        while self.stack.count():
-            widget = self.stack.widget(0); self.stack.removeWidget(widget); widget.deleteLater()
-        for fig in figures:
-            wrapper = QWidget(); wrapper.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-            wrapper.setMinimumHeight(_CHART_CANVAS_MIN_H)
-            wrapper.setMaximumHeight(_CHART_MAX_H)
-            layout = QVBoxLayout(wrapper); layout.setContentsMargins(0, 0, 0, 0); layout.setSpacing(0)
-            _reset_figure_geometry(fig)
-            canvas = FigureCanvas(fig)
-            canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-            canvas.setMinimumHeight(_CHART_CANVAS_MIN_H)
-            canvas.setMaximumHeight(_CHART_MAX_H - _CHART_CANVAS_MARGIN)
-            layout.addWidget(canvas)
-            self.stack.addWidget(wrapper)
-        self._update_dots(); self._redraw_current(); self.restyle()
-
-    def _update_dots(self):
-        total = self.stack.count()
-        if total <= 0: self.dots.setText("")
-        else:
-            current = max(0, min(self.stack.currentIndex(), total - 1))
-            self.dots.setText(" ".join("●" if idx == current else "○" for idx in range(total)))
-        self._update_dot_style()
-
-    def _update_dot_style(self):
-        try: self.dots.setStyleSheet(f"color:{gs.INK_SOFT}; background: transparent;")
-        except Exception: self.dots.setStyleSheet("background: transparent;")
-
-    def next(self):
-        if self.stack.count() == 0: return
-        self.stack.setCurrentIndex((self.stack.currentIndex() + 1) % self.stack.count())
-        self._update_dots(); self._redraw_current()
-
-    def prev(self):
-        if self.stack.count() == 0: return
-        self.stack.setCurrentIndex((self.stack.currentIndex() - 1) % self.stack.count())
-        self._update_dots(); self._redraw_current()
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event); self._resize_timer.start()
-
-    def _redraw_current(self):
-        try:
-            current = self.stack.currentWidget()
-            if not current: return
-            canvas = current.findChild(FigureCanvas)
-            if canvas: canvas.draw_idle()
-        except Exception:
-            pass
-
-    def canvases(self):
-        canvases = []
-        for idx in range(self.stack.count()):
-            widget = self.stack.widget(idx)
-            if not widget: continue
-            canvas = widget.findChild(FigureCanvas)
-            if canvas: canvases.append(canvas)
-        return canvases
-
-    def restyle(self):
-        for canvas in self.canvases():
-            try: gs.restyle_figure(canvas.figure)
-            except Exception: pass
-        self._update_dot_style()
-
-
-# ============================ Popup mini-chip ============================
 class UserMenuPopup(QFrame):
     newUserRequested = Signal()
-    userInfoRequested = Signal()
     themeToggled = Signal(bool)
     deleteAccountRequested = Signal()
     hidden = Signal()
@@ -491,13 +285,6 @@ class UserMenuPopup(QFrame):
 
         lay = QVBoxLayout(self); lay.setContentsMargins(12, 10, 12, 12); lay.setSpacing(10)
 
-        self.btnInfo = QPushButton(self)
-        ic_info, _ = themed_qicon("user_info", self._dark)
-        if not ic_info.isNull(): self.btnInfo.setIcon(ic_info)
-        self.btnInfo.setText("  Información de usuarios")
-        self.btnInfo.clicked.connect(lambda: (self.userInfoRequested.emit(), self.close()))
-        lay.addWidget(self.btnInfo)
-
         self.btnNuevo = QPushButton(self)
         ic_plus, _ = themed_qicon("user_add", self._dark)
         if not ic_plus.isNull(): self.btnNuevo.setIcon(ic_plus)
@@ -506,18 +293,28 @@ class UserMenuPopup(QFrame):
         self.btnNuevo.setVisible(self._is_admin)
         lay.addWidget(self.btnNuevo)
 
-        row = QHBoxLayout(); row.setContentsMargins(10, 0, 10, 0); row.setSpacing(8); row.setAlignment(Qt.AlignVCenter)
-        lbl = QLabel("Modo oscuro"); lbl.setStyleSheet("background: transparent;")
-        self.themeSwitch = QCheckBox(); self.themeSwitch.setObjectName("themeSwitch"); self.themeSwitch.setChecked(self._dark)
-        self.themeSwitch.toggled.connect(self.themeToggled)
-        row.addWidget(lbl); row.addStretch(); row.addWidget(self.themeSwitch); lay.addLayout(row)
-
         self.btnBorrar = QPushButton(self)
         ic_trash, _ = themed_qicon("trash", self._dark)
         if not ic_trash.isNull(): self.btnBorrar.setIcon(ic_trash)
         self.btnBorrar.setText("  Borrar cuenta")
         self.btnBorrar.clicked.connect(lambda: (self.deleteAccountRequested.emit(), self.close()))
         lay.addWidget(self.btnBorrar)
+
+        self.themeRow = QHBoxLayout(); self.themeRow.setContentsMargins(10, 0, 10, 0); self.themeRow.setSpacing(8); self.themeRow.setAlignment(Qt.AlignVCenter)
+        self.lblTheme = QLabel("Modo oscuro"); self.lblTheme.setStyleSheet("background: transparent;")
+        self.themeSwitch = QCheckBox(); self.themeSwitch.setObjectName("themeSwitch"); self.themeSwitch.setChecked(self._dark)
+        self.themeSwitch.toggled.connect(self.themeToggled)
+        lay.addLayout(self.themeRow)
+        self._place_switch_row()
+
+    def _place_switch_row(self):
+        while self.themeRow.count():
+            it = self.themeRow.takeAt(0)
+            w = it.widget()
+            if w: w.setParent(None)
+        self.themeRow.addWidget(self.themeSwitch)
+        self.themeRow.addWidget(self.lblTheme)
+        self.themeRow.addStretch()
 
     def _rebuild_styles(self):
         if self._dark:
@@ -549,7 +346,8 @@ class UserMenuPopup(QFrame):
         self._dark = bool(dark)
         self._rebuild_styles()
         self.themeSwitch.blockSignals(True); self.themeSwitch.setChecked(self._dark); self.themeSwitch.blockSignals(False)
-        for btn, key in ((getattr(self, "btnNuevo", None), "user_add"), (getattr(self, "btnBorrar", None), "trash"), (getattr(self, "btnInfo", None), "user_info")):
+        self._place_switch_row()
+        for btn, key in ((getattr(self, "btnNuevo", None), "user_add"), (getattr(self, "btnBorrar", None), "trash")):
             if btn:
                 ic, _ = themed_qicon(key, self._dark)
                 btn.setIcon(ic if not ic.isNull() else QIcon())
@@ -559,14 +357,11 @@ class UserMenuPopup(QFrame):
         try: self.hidden.emit()
         except Exception: pass
 
-
-# ============================ Main Widget ============================
 class MenuPrincipal(QWidget):
     logoutRequested = Signal()
     newUserRequested = Signal()
     themeToggled = Signal(bool)
     deleteAccountRequested = Signal()
-
     class _CenterOverlay(QDialog):
         def __init__(self, parent, content: QWidget,
                      min_size=(520, 380), max_size=(760, 620),
@@ -579,10 +374,8 @@ class MenuPrincipal(QWidget):
             self._min = QSize(*min_size)
             self._max = QSize(*max_size)
             self._preferred = QSize(*preferred_size) if preferred_size else None
-
             self.setObjectName("centerDialog")
             self.setStyleSheet("#centerDialog { background: transparent; border: none; }")
-
             root = QVBoxLayout(self); root.setContentsMargins(0,0,0,0); root.setSpacing(0); root.setSizeConstraint(QVBoxLayout.SetFixedSize)
             if content is None: content = QWidget()
             try: content.hide()
@@ -596,14 +389,11 @@ class MenuPrincipal(QWidget):
             except Exception: pass
             root.addWidget(content, 0, Qt.AlignCenter)
             self._content = content
-
             self.setMinimumSize(self._min); self.setMaximumSize(self._max)
             if self._preferred: self.resize(self._preferred)
             else: self.adjustSize()
-
             self._wire_common_close_hooks(content)
             self._wire_resize_triggers(content)
-
         def _wire_common_close_hooks(self, content: QWidget):
             for sig_name in ("cancelled", "requestClose", "requestCloseDialog"):
                 sig = getattr(content, sig_name, None)
@@ -620,7 +410,6 @@ class MenuPrincipal(QWidget):
                 users_close = content.findChild(QPushButton, "usersCloseBtn")
                 if users_close: users_close.clicked.connect(self.close)
             except Exception: pass
-
         def _wire_resize_triggers(self, content: QWidget):
             try:
                 from PySide6.QtWidgets import QStackedWidget
@@ -630,12 +419,10 @@ class MenuPrincipal(QWidget):
             content.installEventFilter(self)
             QTimer.singleShot(0, self._sync_to_content)
             QTimer.singleShot(1, self._sync_to_content)
-
         def eventFilter(self, obj, ev):
             if obj is self._content and ev.type() in (QEvent.LayoutRequest, QEvent.Resize, QEvent.Show):
                 self._sync_to_content()
             return super().eventFilter(obj, ev)
-
         def _apply_screen_bounds(self):
             try:
                 parent = self.parentWidget() or self
@@ -649,7 +436,6 @@ class MenuPrincipal(QWidget):
                 screen_max = QSize(safe_w, safe_h)
                 self.setMaximumSize(self._max.boundedTo(screen_max))
             except Exception: pass
-
         def _sync_to_content(self):
             try: hint = self._content.sizeHint()
             except Exception: hint = self.sizeHint()
@@ -658,7 +444,6 @@ class MenuPrincipal(QWidget):
             w = min(self.maximumWidth(), max(self.minimumWidth(), hint.width()))
             h = min(self.maximumHeight(), max(self.minimumHeight(), hint.height()))
             self.resize(w, h); self.adjustSize(); self._recenter()
-
         def _recenter(self):
             try:
                 parent = self.parentWidget() or self
@@ -670,10 +455,8 @@ class MenuPrincipal(QWidget):
                     y = geo.y() + (geo.height() - self.height()) // 2
                     self.move(x, y)
             except Exception: pass
-
         def showEvent(self, e):
             super().showEvent(e); self._apply_screen_bounds(); self._sync_to_content()
-
         def keyPressEvent(self, e):
             if e.key() == Qt.Key_Escape: self.close()
             else: super().keyPressEvent(e)
@@ -685,50 +468,34 @@ class MenuPrincipal(QWidget):
         self._sidebar_collapsed = False
         self._userMenuPopup = None
         self._current_dark = bool(((self.session or {}).get("user") or {}).get("dark_mode", False))
-
-        # overlay persistente (mantenido)
         self._overlayHost = None
         self._overlayCard = None
         self._overlayBody = None
-
-        # cache figuras de dashboard en esta instancia (evita recomputar al volver a Inicio)
-        self._fig_cache = None  # list[Figure] | None
-        self._fig_cache_ready = False
-
-        # threads y job-ids
         self._threads: dict[str, dict] = {}
         self._job_seq = {"kpis": 0}
-
-        # estado de cierre
+        self._active_canvases: list = []
         self._shutting_down = False
-
-        # loader incremental de figuras
-        self._fig_queue = []     # lista de callables que crean Figure
-        self._figs_built = []    # Figures ya creadas (progresivo)
-
         self._build_ui()
+        self._plot_views: list = []
+        self._plot_cards: list = []
         self._ensure_overlay_host()
         self._apply_theme(self._current_dark)
-
         self.installEventFilter(self); self.topBar.installEventFilter(self); self.userChip.installEventFilter(self)
         for w in (self.avatarLbl, self.nameLbl, self.roleLbl, self.userChipArrow):
             w.installEventFilter(self)
-
         self._ensure_perms_loaded()
         self._apply_permissions_global()
-
+        QTimer.singleShot(0, self._refresh_inicio_data_async)
         self.newUserRequested.connect(self._on_new_user_requested)
         self.themeToggled.connect(self._on_theme_toggled)
         self.deleteAccountRequested.connect(self._on_delete_account_requested)
-
-        # Inicio
         if self._user_can_dashboard():
             self._ensure_inicio_visible_widgets()
             self._refresh_inicio_data_async()
+            self._render_plotly_charts()
         else:
             self._blank_inicio()
 
-    # --- Event filter
     def eventFilter(self, obj: QObject, ev: QEvent) -> bool:
         if obj in (getattr(self, "userChip", None), self.avatarLbl, self.nameLbl, self.roleLbl, self.userChipArrow):
             if ev.type() == QEvent.MouseButtonPress and hasattr(ev, "button") and ev.button() == Qt.LeftButton:
@@ -744,62 +511,108 @@ class MenuPrincipal(QWidget):
         self._reposition_user_menu_popup()
         self._resize_overlay_host()
 
-    # -------------------- UI --------------------
+     # ==== refrescar UI ====
+    def refrescar_todo_el_sistema(self):
+        """
+        Refresca TODOS los módulos cargados en el sistema.
+        Se ejecuta al hacer click en el logo de Rodler.
+        """
+        print(">>> Refrescando sistema completo")
+    
+        # Procesar eventos pendientes
+        QApplication.processEvents()
+    
+        # Recorrer todas las páginas del stackedWidget REAL
+        for i in range(self.stackedWidget.count()):
+            widget = self.stackedWidget.widget(i)
+            if widget is None:
+                continue
+            
+            # 1) El módulo es el widget principal
+            if hasattr(widget, "refrescar") and callable(widget.refrescar):
+                try:
+                    widget.refrescar()
+                    print(f"✔ Refrescado: {type(widget).__name__}")
+                except Exception as e:
+                    print(f"✖ Error refrescando {type(widget).__name__}: {e}")
+    
+            # 2) El módulo está contenido dentro del widget
+            for child in widget.findChildren(QWidget):
+                if hasattr(child, "refrescar") and callable(child.refrescar):
+                    try:
+                        child.refrescar()
+                        print(f"✔ Refrescado: {type(child).__name__}")
+                    except Exception as e:
+                        print(f"✖ Error refrescando {type(child).__name__}: {e}")
+    
+        # Reaplicar estilos y forzar redraw
+        try:
+            self.style().unpolish(self)
+            self.style().polish(self)
+            self.update()
+        except Exception:
+            pass
+        
+        print(">>> Sistema refrescado por completo")
+
+
     def _build_ui(self):
         self.rootLayout = QGridLayout(self); self.rootLayout.setContentsMargins(0,0,0,0); self.rootLayout.setSpacing(0)
-
         mainContainer = QWidget(self); mainContainer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         grid = QGridLayout(mainContainer); grid.setContentsMargins(0,0,0,0); grid.setSpacing(0)
-
-        # Top bar
         self.topBar = QWidget(mainContainer); self.topBar.setObjectName("topBar")
         self.topBar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         tb = QHBoxLayout(self.topBar); tb.setContentsMargins(8,6,8,6); tb.setSpacing(8)
+
+
 
         brandWrap = QFrame(self.topBar); brandWrap.setObjectName("brand")
         brandWrap.setStyleSheet("background: transparent; border: none;")
         brandL = QVBoxLayout(brandWrap); brandL.setContentsMargins(0,0,0,0)
         self.appTitle = QLabel("Rodler"); self.appTitle.setObjectName("appTitle"); brandL.addWidget(self.appTitle)
+        self.appTitle.setCursor(Qt.PointingHandCursor)
+        self.appTitle.setToolTip("Refrescar sistema")
+        self.appTitle.mousePressEvent = lambda event: self.refrescar_todo_el_sistema()
         tb.addWidget(brandWrap); tb.addStretch(1)
 
-        # Chip
+        self.appTitle.setStyleSheet("""
+            QLabel#appTitle:hover {
+                color: #0078d7;
+                text-decoration: underline;
+            }
+        """)
+
+
+
+
         self.userChip = QFrame(self.topBar); self.userChip.setObjectName("userChip")
         self.userChip.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.userChip.setMinimumWidth(CHIP_MIN_WIDTH)
         chipL = QHBoxLayout(self.userChip); chipL.setContentsMargins(12, 6, 12, 6); chipL.setSpacing(8); chipL.setAlignment(Qt.AlignCenter)
-
         self.avatarLbl = QLabel(); self.avatarLbl.setFixedSize(28, 28)
         self.nameLbl = QLabel(); self.nameLbl.setProperty("role", "name")
         self.roleLbl = QLabel(); self.roleLbl.setProperty("role", "role")
         txtBox = QVBoxLayout(); txtBox.setContentsMargins(0, 0, 0, 0); txtBox.setSpacing(0); txtBox.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
         self.nameLbl.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter); self.roleLbl.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
         txtBox.addWidget(self.nameLbl); txtBox.addWidget(self.roleLbl)
-
         self.userChipArrow = QPushButton(); self.userChipArrow.setObjectName("userChipArrow")
         self.userChipArrow.setCursor(Qt.PointingHandCursor); self.userChipArrow.setToolTip("Abrir menú")
         ic_down, fb_down = themed_qicon("chevron_down", False)
         if not ic_down.isNull(): self.userChipArrow.setIcon(ic_down)
         else: self.userChipArrow.setText(fb_down or "▾")
-
         chipL.addWidget(self.avatarLbl, 0, Qt.AlignVCenter)
         chipL.addLayout(txtBox)
         chipL.addWidget(self.userChipArrow, 0, Qt.AlignVCenter)
         tb.addWidget(self.userChip, 0, Qt.AlignRight)
-
         self.update_user_info(self.session)
         grid.addWidget(self.topBar, 0, 0, 1, 2)
-
-        # Sidebar
         self.menuLateral = QFrame(mainContainer); self.menuLateral.setObjectName("sidebar")
         self.menuLateral.setMaximumWidth(EXPANDED_WIDTH); self.menuLateral.setMinimumWidth(0)
         self.menuLateral.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
         self.animation_sidebar = QPropertyAnimation(self.menuLateral, b"maximumWidth"); self.animation_sidebar.setDuration(220)
-
         sb = QVBoxLayout(self.menuLateral); sb.setContentsMargins(12,12,12,12); sb.setSpacing(10)
-
         header = QFrame(self.menuLateral); header.setObjectName("sidebarHeader")
         hLay = QHBoxLayout(header); hLay.setContentsMargins(0,0,0,0); hLay.addSpacerItem(QSpacerItem(1,1,QSizePolicy.Expanding,QSizePolicy.Minimum))
-
         che_left, fb_l = themed_qicon("chevron_left", self._current_dark)
         self.botonOcultarMenu = QPushButton(fb_l if che_left.isNull() else "")
         self.botonOcultarMenu.setIcon(che_left if not che_left.isNull() else QIcon())
@@ -808,10 +621,8 @@ class MenuPrincipal(QWidget):
         self.botonOcultarMenu.setCursor(Qt.PointingHandCursor); self.botonOcultarMenu.setToolTip("Colapsar menú")
         self.botonOcultarMenu.clicked.connect(self.toggleMenuLateral)
         hLay.addWidget(self.botonOcultarMenu); sb.addWidget(header)
-
         self.btn_group = QButtonGroup(self); self.btn_group.setExclusive(True)
         self.menu_buttons = {}; self.modulos = {}
-
         def _make_nav_button(nombre: str, icon_key: str):
             icon, fb = themed_qicon(icon_key, self._current_dark)
             btn = QPushButton(nombre if icon.isNull() else nombre)
@@ -821,15 +632,12 @@ class MenuPrincipal(QWidget):
             if not icon.isNull(): btn.setIcon(icon); btn.setIconSize(ICON_SIZE)
             else: btn.setText(f"{fb}  {nombre}" if fb else nombre)
             return btn
-
         for nombre, icon_key, clase in NAV_ITEMS:
             self.modulos[nombre] = clase
             btn = _make_nav_button(nombre, icon_key)
             btn.clicked.connect(lambda checked, m=nombre: self.abrir_modulo(m))
             sb.addWidget(btn); self.btn_group.addButton(btn); self.menu_buttons[nombre] = btn
-
         sb.addStretch(1)
-
         lg_icon, lg_fb = themed_qicon("logout", self._current_dark)
         self.logoutBtn = QPushButton("Logout" if lg_icon.isNull() else "Logout")
         self.logoutBtn.setObjectName("logoutBtn"); self.logoutBtn.setCursor(Qt.PointingHandCursor)
@@ -838,30 +646,20 @@ class MenuPrincipal(QWidget):
             if lg_fb: self.logoutBtn.setText(f"{lg_fb}  Logout")
         self.logoutBtn.setToolTip("Cerrar sesión"); self.logoutBtn.clicked.connect(self._do_logout)
         sb.addWidget(self.logoutBtn)
-
         grid.addWidget(self.menuLateral, 1, 0, 1, 1)
-
-        # Stack contenido
         self.stackedWidget = QStackedWidget(mainContainer); self.stackedWidget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-
-        # Dashboard (Inicio)
         self.paginaPrincipal = QWidget(); self.paginaPrincipal.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         dashboard = QGridLayout(self.paginaPrincipal)
         dashboard.setContentsMargins(0,0,0,0)
         dashboard.setHorizontalSpacing(12); dashboard.setVerticalSpacing(12)
-
-        # KPIs sin íconos
         self.kpi_ventas  = KpiTile("Ventas del mes", show_icon=False)
         self.kpi_compras = KpiTile("Compras del mes", show_icon=False)
         self.kpi_topprod = KpiTile("Producto más vendido (mes)", show_icon=False)
         self.kpi_stock   = KpiTile("Stock crítico", show_icon=False)
-
-        # placeholders mientras carga
         self.kpi_ventas.set_value("Cargando…", "Total vendido")
         self.kpi_compras.set_value("Cargando…", "Total comprado")
         self.kpi_topprod.set_value("Cargando…", "")
         self.kpi_stock.set_value("—", "…")
-
         kpis = QHBoxLayout()
         for w in (self.kpi_ventas, self.kpi_compras, self.kpi_topprod, self.kpi_stock):
             w.setMinimumHeight(90)
@@ -870,35 +668,105 @@ class MenuPrincipal(QWidget):
         kpis_wrap = QFrame(); kpis_wrap.setLayout(kpis); kpis_wrap.setObjectName("transparent")
         kpis_wrap.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         dashboard.addWidget(kpis_wrap, 0, 0, 1, 3)
-
-        # === Gráficos (compactos y estables) ===
-        self.carousel = ChartCarousel("", autorotate_ms=7000)
-        dashboard.addWidget(self.carousel, 1, 0, 1, 2)
-
-        self.card_right = ChartCard("Distribución de gastos por tipo")
-        dashboard.addWidget(self.card_right, 1, 2, 1, 1)
-
-        # Distribución vertical: la fila 1 absorbe el extra
-        dashboard.setRowStretch(0, 0)   # KPIs
-        dashboard.setRowStretch(1, 1)   # gráficos (crece, pero con altura máxima en tarjetas)
-        dashboard.setRowStretch(2, 0)   # clima
-
+        chartsWrap = QFrame(self.paginaPrincipal)
+        chartsWrap.setObjectName("chartsWrap")
+        chartsWrap.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        chartsLay = QVBoxLayout(chartsWrap); chartsLay.setContentsMargins(0,0,0,0); chartsLay.setSpacing(0)
+        chartsGridWrap = QWidget(chartsWrap)
+        self.chartGrid = QGridLayout(chartsGridWrap)
+        self.chartGrid.setContentsMargins(0,0,0,0)
+        self.chartGrid.setHorizontalSpacing(12)
+        self.chartGrid.setVerticalSpacing(12)
+        chartsLay.addWidget(chartsGridWrap)
+        dashboard.addWidget(chartsWrap, 1, 0, 1, 3)
         self.weather = DashboardWeatherPanel(); self.weather.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         dashboard.addWidget(self.weather, 2, 0, 1, 3)
-
-        dashboard.setColumnStretch(0, 2); dashboard.setColumnStretch(1, 2); dashboard.setColumnStretch(2, 1)
-
+        dashboard.setRowStretch(0, 0)
+        dashboard.setRowStretch(1, 1)
+        dashboard.setRowStretch(2, 0)
+        dashboard.setColumnStretch(0, 1); dashboard.setColumnStretch(1, 1); dashboard.setColumnStretch(2, 1)
         self.stackedWidget.addWidget(self.paginaPrincipal)
         grid.addWidget(self.stackedWidget, 1, 1, 1, 1)
-
         grid.setRowStretch(0, 0); grid.setRowStretch(1, 1)
         grid.setColumnStretch(0, 0); grid.setColumnStretch(1, 1)
-
         self.rootLayout.addWidget(mainContainer, 0, 0)
         self.menu_buttons["Inicio"].setChecked(True)
         self.stackedWidget.setCurrentWidget(self.paginaPrincipal)
 
-    # ---------- Overlay persistente ----------
+    def _make_plotly_card(self, title: str, fig_builder: callable) -> QFrame:
+        card = QFrame(self.paginaPrincipal)
+        card.setProperty("role", "plotlycard")
+        card.setObjectName("tarjetaDashboard")
+        card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        lay = QVBoxLayout(card)
+        lay.setContentsMargins(12, 12, 12, 12)
+        lay.setSpacing(8)
+        lbl = QLabel(title, card)
+        lbl.setProperty("role", "cardtitle")
+        lay.addWidget(lbl)
+        view = QWebEngineView(card)
+        view.setAttribute(Qt.WA_TranslucentBackground, True)
+        view.setStyleSheet("background: transparent; border-radius: 14px;")
+        view.page().setBackgroundColor(QColor(0, 0, 0, 0))
+        view.setContextMenuPolicy(Qt.NoContextMenu)
+        view.setMinimumHeight(260)
+        lay.addWidget(view, 1)
+        self._plot_views.append((view, fig_builder))
+        try:
+            dark = is_dark_mode()
+            fig = fig_builder()
+            html = fig_to_html(fig, dark=dark)
+            view.setHtml(html, QUrl("about:blank"))
+        except Exception as e:
+            view.setHtml(f"<html><body><p style='color:#E11D48'>Error: {e}</p></body></html>")
+        return card
+
+    def _render_plotly_charts(self):
+        from PySide6.QtWebEngineWidgets import QWebEngineView
+        from plotly.io import to_html
+        from graficos.graficos_dashboard2 import (
+            create_ventas_vs_compras_plotly,
+            create_gastos_mensuales_plotly,
+            create_presupuesto_vs_gasto_plotly,
+            create_gastos_por_tipo_plotly
+        )
+        if not hasattr(self, "_plot_views"):
+            self._plot_views = []
+        for v in getattr(self, "_plot_views", []):
+            v.setParent(None)
+        self._plot_views.clear()
+        self._clear_layout(self.chartGrid)
+        try:
+            fig1 = create_ventas_vs_compras_plotly()
+            fig2 = create_gastos_mensuales_plotly()
+            fig3 = create_presupuesto_vs_gasto_plotly()
+            fig4 = create_gastos_por_tipo_plotly()
+        except Exception as e:
+            print(f"[Dashboard] Error generando figuras: {e}")
+            return
+        figs = [fig1, fig2, fig3, fig4]
+        for i, fig in enumerate(figs):
+            try:
+                view = QWebEngineView()
+                view.setHtml(to_html(fig, include_plotlyjs="cdn", full_html=False))
+                view.setStyleSheet("border-radius: 14px; background: transparent;")
+                row, col = divmod(i, 2)
+                self.chartGrid.addWidget(view, row, col)
+                self._plot_views.append(view)
+            except Exception as e:
+                print(f"[Dashboard] Error insertando gráfico {i+1}: {e}")
+
+    def _clear_layout(self, layout):
+        if layout is None:
+            return
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+            elif item.layout() is not None:
+                self._clear_layout(item.layout())
+
     def _ensure_overlay_host(self):
         if self._overlayHost:
             self._resize_overlay_host()
@@ -910,24 +778,18 @@ class MenuPrincipal(QWidget):
         """)
         ov.setAttribute(Qt.WA_TransparentForMouseEvents, False)
         ov.hide()
-
         lay = QVBoxLayout(ov); lay.setContentsMargins(0,0,0,0); lay.setSpacing(0)
         centerWrap = QWidget(ov); cwL = QVBoxLayout(centerWrap); cwL.setAlignment(Qt.AlignCenter); cwL.setContentsMargins(0,0,0,0); cwL.setSpacing(0)
         card = QFrame(centerWrap); card.setObjectName("overlayCard")
         cardL = QVBoxLayout(card); cardL.setContentsMargins(16,16,16,16); cardL.setSpacing(10)
-
         btnClose = QPushButton("✕", card); btnClose.setCursor(Qt.PointingHandCursor); btnClose.setFixedWidth(34)
         btnClose.setStyleSheet("QPushButton{border:none;font-size:16px;} QPushButton:hover{background:rgba(0,0,0,.06); border-radius:6px;}")
         hdr = QHBoxLayout(); hdr.addStretch(1); hdr.addWidget(btnClose); cardL.addLayout(hdr)
-
         body = QFrame(card); body.setObjectName("overlayBody")
         bodyL = QVBoxLayout(body); bodyL.setContentsMargins(0,0,0,0); bodyL.setSpacing(0)
         cardL.addWidget(body)
-
         cwL.addWidget(card); lay.addWidget(centerWrap)
-
         self._overlayHost = ov; self._overlayCard = card; self._overlayBody = body
-
         btnClose.clicked.connect(self._hide_overlay)
         ov.installEventFilter(self)
         self._resize_overlay_host()
@@ -978,12 +840,10 @@ class MenuPrincipal(QWidget):
         self._overlayHost.show()
         self._overlayHost.raise_()
 
-    # ===== Helper para abrir el QDialog centrado =====
     def _show_center_overlay_dialog(self, content: QWidget, min_wh=(520,380), max_wh=(760,620)):
         dlg = self._CenterOverlay(self, content, min_size=min_wh, max_size=max_wh)
         dlg.exec()
 
-    # -------------------- Tema --------------------
     def _refresh_all_icons(self):
         for nombre, icon_key, _ in NAV_ITEMS:
             btn = self.menu_buttons.get(nombre)
@@ -995,14 +855,12 @@ class MenuPrincipal(QWidget):
             else:
                 btn.setIcon(QIcon())
                 btn.setText((fb if self._sidebar_collapsed else (f"{fb}  {nombre}" if fb else nombre)) if fb else ("" if self._sidebar_collapsed else nombre))
-
         che_key = "chevron_right" if self._sidebar_collapsed else "chevron_left"
         ic, fb = themed_qicon(che_key, self._current_dark)
         if not ic.isNull():
             self.botonOcultarMenu.setIcon(ic); self.botonOcultarMenu.setIconSize(ICON_SIZE); self.botonOcultarMenu.setText("")
         else:
             self.botonOcultarMenu.setIcon(QIcon()); self.botonOcultarMenu.setText(fb or "")
-
         ic, fb = themed_qicon("logout", self._current_dark)
         if not ic.isNull():
             self.logoutBtn.setIcon(ic); self.logoutBtn.setIconSize(ICON_SIZE)
@@ -1010,18 +868,15 @@ class MenuPrincipal(QWidget):
         else:
             self.logoutBtn.setIcon(QIcon())
             self.logoutBtn.setText((fb or "Logout") if not self._sidebar_collapsed else (fb or ""))
-
         arrow_key = "chevron_up" if (self._userMenuPopup and self._userMenuPopup.isVisible()) else "chevron_down"
         ic, fb = themed_qicon(arrow_key, self._current_dark)
         if not ic.isNull():
             self.userChipArrow.setIcon(ic); self.userChipArrow.setIconSize(ICON_SIZE); self.userChipArrow.setText("")
         else:
             self.userChipArrow.setIcon(QIcon()); self.userChipArrow.setText(fb or ("▴" if arrow_key=="chevron_up" else "▾"))
-
         if self._userMenuPopup:
             for btn, key in ((getattr(self._userMenuPopup, "btnNuevo", None), "user_add"),
-                             (getattr(self._userMenuPopup, "btnBorrar", None), "trash"),
-                             (getattr(self._userMenuPopup, "btnInfo",  None), "user_info")):
+                             (getattr(self._userMenuPopup, "btnBorrar", None), "trash")):
                 if btn:
                     ic, _ = themed_qicon(key, self._current_dark)
                     btn.setIcon(ic if not ic.isNull() else QIcon())
@@ -1042,22 +897,18 @@ class MenuPrincipal(QWidget):
                 self._userMenuPopup.set_dark_mode(self._current_dark)
                 self._userMenuPopup.setStyleSheet(self._userMenuPopup._open_stylesheet if self._userMenuPopup.isVisible() else self._userMenuPopup._closed_stylesheet)
             except Exception: pass
-
-        self._refresh_all_icons(); self._restyle_dashboard_charts()
-
+        self._refresh_all_icons()
         for w in (getattr(self, "kpi_ventas", None),
                   getattr(self, "kpi_compras", None),
                   getattr(self, "kpi_topprod", None),
                   getattr(self, "kpi_stock", None)):
             if w: w.apply_kpi_theme(self._current_dark)
+        try:
+            if self._user_can_dashboard() and self.stackedWidget.currentWidget() is self.paginaPrincipal:
+                self._rerender_plotly_charts()
+        except Exception:
+            pass
 
-    def _restyle_dashboard_charts(self):
-        try: getattr(self, 'carousel', None) and self.carousel.restyle()
-        except Exception: pass
-        try: getattr(self, 'card_right', None) and self.card_right.restyle()
-        except Exception: pass
-
-    # -------------------- Información de usuario --------------------
     def update_user_info(self, session: dict | None = None):
         if session is not None: self.session = session
         display_name, role = _resolver_user_fields(self.session)
@@ -1071,14 +922,12 @@ class MenuPrincipal(QWidget):
             try: self._userMenuPopup.set_dark_mode(self._current_dark)
             except Exception: pass
 
-    # -------------------- Popup del chip --------------------
     def _ensure_user_menu_popup(self):
         if self._userMenuPopup is None:
             roles, _ = _session_roles_perms(self.session)
             is_admin = ('admin' in roles)
             self._userMenuPopup = UserMenuPopup(parent=self, is_admin=is_admin, dark_mode=self._current_dark)
             self._userMenuPopup.newUserRequested.connect(self.newUserRequested)
-            self._userMenuPopup.userInfoRequested.connect(self._open_users_info_overlay)
             self._userMenuPopup.themeToggled.connect(self._on_theme_toggled_proxy)
             self._userMenuPopup.deleteAccountRequested.connect(self.deleteAccountRequested)
             self._userMenuPopup.hidden.connect(self._on_user_menu_hidden)
@@ -1143,31 +992,65 @@ class MenuPrincipal(QWidget):
             return
         self._apply_theme(bool(dark))
 
-    # -------------------- Acciones de overlay --------------------
-    def _open_users_info_overlay(self):
-        try:
-            w = UsersListWindow(parent=None)
-            self._show_center_overlay_dialog(w, min_wh=(520,380), max_wh=(760,620))
-        except Exception as e:
-            QMessageBox.critical(self, "Usuarios", f"No se pudo abrir la información de usuarios.\n\n{e}")
-
     def _on_new_user_requested(self):
         try:
-            from forms import create_user_form as m
-            if hasattr(m, "Ui_Form"):
-                w = QWidget(); m.Ui_Form().setupUi(w)
-            elif hasattr(m, "CreateUserForm"):
-                w = m.CreateUserForm()
-            else:
-                raise RuntimeError("forms/create_user_form.py no define Ui_Form ni CreateUserForm.")
-            self._show_center_overlay_dialog(w, min_wh=(700,420), max_wh=(1000,760))
+            from forms.create_user_form import CreateUserForm
+
+            form = CreateUserForm()
+            form.submitted.connect(self._on_create_user_submitted)
+
+            self._show_center_overlay_dialog(
+                form,
+                min_wh=(700, 420),
+                max_wh=(1000, 760)
+            )
+
         except Exception as e:
-            QMessageBox.information(self, "Nuevo usuario", f"No se pudo abrir el formulario de alta.\n\n{e}")
+            QMessageBox.critical(
+                self,
+                "Nuevo usuario",
+                f"No se pudo abrir el formulario.\n\n{e}"
+            )
+    
+    def _on_create_user_submitted(self, data: dict):
+        try:
+            from argon2 import PasswordHasher
+            from db.users_services import crear_usuario
+
+            ph = PasswordHasher()
+
+            password_hash = ph.hash(data["password"])
+
+            crear_usuario(
+                username=data["username"],
+                pass_hash=password_hash,
+                full_name=data["full_name"],
+                phone=data["phone"],
+                role_name=data["role"]
+            )
+
+            QMessageBox.information(self, "Usuario", "Usuario creado correctamente.")
+
+            # cerrar diálogo
+            sender = self.sender()
+            if sender:
+                sender._close_dialog_container()
+
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "Error",
+                str(e)
+            )
+
 
     def _on_delete_account_requested(self):
-        QMessageBox.information(self, "Cuenta", "Funcionalidad de borrado pendiente de implementación.")
+        if QMessageBox.question(self, "Eliminar cuenta", "¿Eliminar esta cuenta?",
+                                QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+            return
+        else:
+            pass
 
-    # -------------------- Logout & cierre seguro --------------------
     def _stop_all_threads(self, timeout_ms: int = 1500):
         items = list((self._threads or {}).items())
         self._threads.clear()
@@ -1187,8 +1070,6 @@ class MenuPrincipal(QWidget):
                 th.wait(timeout_ms)
             except Exception:
                 pass
-
-        # detener posibles timers del clima
         try:
             w = getattr(self, "weather", None)
             for m in ("stop", "shutdown", "request_stop", "stop_threads"):
@@ -1225,7 +1106,6 @@ class MenuPrincipal(QWidget):
             pass
         super().closeEvent(e)
 
-    # -------------------- permisos / dashboard --------------------
     def _ensure_perms_loaded(self):
         if (self.session or {}).get("perms"): return
         user = (self.session or {}).get("user") or {}
@@ -1265,8 +1145,6 @@ class MenuPrincipal(QWidget):
         roles, perms = _session_roles_perms(self.session)
         if self._user_can_dashboard(): self._ensure_inicio_visible_widgets()
         else: self._blank_inicio()
-
-        # Modo permisivo si no hay permisos cargados (evita ocultar todo si falla la DB)
         perms_loaded = bool((self.session or {}).get("perms"))
         for nombre, btn in self.menu_buttons.items():
             code = PERM_VIEW_BY_MODULE.get(nombre)
@@ -1274,7 +1152,6 @@ class MenuPrincipal(QWidget):
                 btn.setVisible(True)
             else:
                 btn.setVisible(True if not perms_loaded else _can(roles, perms, code))
-
         if self.stackedWidget.currentWidget() is None:
             self.stackedWidget.setCurrentWidget(self.paginaPrincipal)
 
@@ -1282,7 +1159,7 @@ class MenuPrincipal(QWidget):
         if getattr(self, "_inicio_blank", False): return
         self._inicio_blank = True
         try:
-            for w in (self.kpi_ventas, self.kpi_compras, self.kpi_topprod, self.kpi_stock, self.carousel, self.card_right, self.weather):
+            for w in (self.kpi_ventas, self.kpi_compras, self.kpi_topprod, self.kpi_stock, self.weather):
                 if w and w.parent(): w.setVisible(False)
             if not hasattr(self, "_lblInicioVacio"):
                 self._lblInicioVacio = QLabel("", self.paginaPrincipal)
@@ -1297,35 +1174,38 @@ class MenuPrincipal(QWidget):
 
     def _ensure_inicio_visible_widgets(self):
         self._inicio_blank = False
-        for w in (self.kpi_ventas, self.kpi_compras, self.kpi_topprod, self.kpi_stock, self.carousel, self.card_right, self.weather):
+        for w in (self.kpi_ventas, self.kpi_compras, self.kpi_topprod, self.kpi_stock, self.weather):
             try:
                 if w: w.setVisible(True)
             except Exception:
                 pass
         if hasattr(self, "_lblInicioVacio"): self._lblInicioVacio.setVisible(False)
 
-    # -------------------- permisos por módulo --------------------
     def _apply_permissions_to_module_page(self, nombre_modulo: str, pagina: QWidget):
         if pagina is None:
             return
-
         roles, perms = _session_roles_perms(self.session)
-
         def _grey_disable(w):
             try:
                 w.setEnabled(False)
-                w.setStyleSheet(w.styleSheet() + "; opacity:0.6;")
+                if hasattr(w, "setGraphicsEffect"):
+                    try:
+                        from PySide6.QtWidgets import QGraphicsOpacityEffect
+                        eff = QGraphicsOpacityEffect(w)
+                        eff.setOpacity(0.6)
+                        w.setGraphicsEffect(eff)
+                    except Exception:
+                        pass
+                st = w.style()
+                st.unpolish(w); st.polish(w)
             except Exception:
                 pass
-
         actions = PERM_ACTIONS_BY_MODULE.get(nombre_modulo) or {}
         lacks = {
             "create": not _can(roles, perms, actions.get("create", "")),
             "update": not _can(roles, perms, actions.get("update", "")),
             "delete": not _can(roles, perms, actions.get("delete", "")),
         }
-
-        # 1) Por mapeo explícito de botones
         names_map = ACTION_BUTTONS_BY_MODULE.get(nombre_modulo, {})
         for kind, need in lacks.items():
             if not need:
@@ -1334,16 +1214,12 @@ class MenuPrincipal(QWidget):
                 btn = pagina.findChild(QPushButton, obj_name)
                 if btn:
                     _grey_disable(btn)
-
-        # 2) Por propiedad 'perm_code' en botones
         for b in pagina.findChildren(QPushButton):
             if not b.isEnabled():
                 continue
             perm_code = (b.property("perm_code") or "").strip()
             if perm_code and not _can(roles, perms, perm_code):
                 _grey_disable(b)
-
-        # 3) Heurística textual (fallback)
         for b in pagina.findChildren(QPushButton):
             if not b.isEnabled():
                 continue
@@ -1356,7 +1232,6 @@ class MenuPrincipal(QWidget):
             if lacks["delete"] and any(k in name or k in text for k in ("eliminar","borrar","quitar","suprimir")):
                 _grey_disable(b); continue
 
-    # -------------------- sidebar --------------------
     def _apply_sidebar_mode(self, collapsed: bool):
         if collapsed:
             for nombre, icon_key, _ in NAV_ITEMS:
@@ -1366,11 +1241,9 @@ class MenuPrincipal(QWidget):
                 if not ic.isNull(): btn.setText(""); btn.setIcon(ic); btn.setIconSize(ICON_SIZE)
                 else: btn.setText(fb)
             self.animation_sidebar.setStartValue(self.menuLateral.maximumWidth()); self.animation_sidebar.setEndValue(COLLAPSED_WIDTH)
-
             che_right, fb_r = themed_qicon("chevron_right", self._current_dark)
             self.botonOcultarMenu.setIcon(che_right if not che_right.isNull() else QIcon())
             self.botonOcultarMenu.setText(fb_r if che_right.isNull() else ""); self.botonOcultarMenu.setToolTip("Expandir menú")
-
             lg_icon, lg_fb = themed_qicon("logout", self._current_dark)
             if not lg_icon.isNull(): self.logoutBtn.setText(""); self.logoutBtn.setIcon(lg_icon); self.logoutBtn.setIconSize(ICON_SIZE)
             else: self.logoutBtn.setText(lg_fb or "⎋"); self.logoutBtn.setToolTip("Cerrar sesión")
@@ -1381,17 +1254,13 @@ class MenuPrincipal(QWidget):
                 ic, fb = themed_qicon(icon_key, self._current_dark)
                 if not ic.isNull(): btn.setIcon(ic); btn.setIconSize(ICON_SIZE); btn.setText(nombre)
                 else: btn.setText(f"{fb}  {nombre}" if fb else nombre)
-
             self.animation_sidebar.setStartValue(self.menuLateral.maximumWidth()); self.animation_sidebar.setEndValue(EXPANDED_WIDTH)
-
             che_left, fb_l = themed_qicon("chevron_left", self._current_dark)
             self.botonOcultarMenu.setIcon(che_left if not che_left.isNull() else QIcon())
             self.botonOcultarMenu.setText(fb_l if che_left.isNull() else ""); self.botonOcultarMenu.setToolTip("Colapsar menú")
-
             lg_icon, lg_fb = themed_qicon("logout", self._current_dark)
             if not lg_icon.isNull(): self.logoutBtn.setIcon(lg_icon); self.logoutBtn.setIconSize(ICON_SIZE); self.logoutBtn.setText("Logout")
             else: self.logoutBtn.setText(f"{lg_fb}  Logout" if lg_fb else "Logout"); self.logoutBtn.setToolTip("Cerrar sesión")
-
         self.animation_sidebar.start()
         self._refresh_all_icons()
 
@@ -1399,34 +1268,28 @@ class MenuPrincipal(QWidget):
         self._sidebar_collapsed = not self._sidebar_collapsed
         self._apply_sidebar_mode(self._sidebar_collapsed)
 
-    # -------------------- navegación módulos --------------------
     def abrir_modulo(self, nombre_modulo: str):
-        roles, perms = _session_roles_perms(self.session)
+      
+        try:
+            self._stop_all_threads()
+        except Exception as e:
+           print("[WARN] Error al detener threads:", e)
 
+        roles, perms = _session_roles_perms(self.session)
         if nombre_modulo == "Inicio":
             self.stackedWidget.setCurrentWidget(self.paginaPrincipal)
             if self._user_can_dashboard():
                 self._ensure_inicio_visible_widgets()
-                if self._fig_cache_ready and self._fig_cache:
-                    try:
-                        self.carousel.set_figures(self._fig_cache[:-1])
-                        self.card_right.set_figure(self._fig_cache[-1])
-                    except Exception:
-                        self._start_build_figures_incrementally(force=True)
-                else:
-                    self._start_build_figures_incrementally(force=True)
             else:
                 self._blank_inicio()
+            QTimer.singleShot(0, self._refresh_inicio_data_async)
             return
-
         view_code = PERM_VIEW_BY_MODULE.get(nombre_modulo)
         if view_code and not _can(roles, perms, view_code):
             return
-
         attr = f"pagina_{nombre_modulo}"
         if hasattr(self, attr):
             self.stackedWidget.setCurrentWidget(getattr(self, attr)); return
-
         clase_modulo = self.modulos[nombre_modulo]
         instancia_modulo = clase_modulo() if clase_modulo is not None else None
         pagina = self.paginaPrincipal if instancia_modulo is None else (QWidget() if hasattr(instancia_modulo, "setupUi") else instancia_modulo)
@@ -1439,7 +1302,6 @@ class MenuPrincipal(QWidget):
         self._apply_permissions_to_module_page(nombre_modulo, pagina)
         self.stackedWidget.setCurrentWidget(pagina)
 
-    # -------------------- datos/gráficos --------------------
     def _fmt_currency(self, x: float) -> str:
         return f"Gs. {x:,.0f}".replace(",", ".")
 
@@ -1449,14 +1311,11 @@ class MenuPrincipal(QWidget):
             return row['ini'], row['fin']
 
     def _start_thread_job(self, name: str, fn, on_done):
-        """Arranca un job en QThread. on_done(result, error, job_id)."""
         jid = self._job_seq.get(name, 0) + 1
         self._job_seq[name] = jid
-
         th = QThread(self)
         worker = _FuncWorker(fn)
         worker.moveToThread(th)
-
         def _finished(res, err):
             try:
                 if (jid == self._job_seq.get(name, 0)) and not getattr(self, "_shutting_down", False):
@@ -1466,142 +1325,88 @@ class MenuPrincipal(QWidget):
                     th.quit()
                 except Exception:
                     pass
-
         self._threads[name] = {"thread": th, "worker": worker, "jid": jid}
-
         worker.finished.connect(_finished)
         worker.finished.connect(worker.deleteLater)
         th.finished.connect(lambda: self._threads.pop(name, None))
         th.finished.connect(th.deleteLater)
-
         th.started.connect(worker.run)
         th.start()
 
     def _refresh_inicio_data_async(self):
         if getattr(self, "_shutting_down", False):
             return
-
-        # 1) Placeholders
-        self.kpi_ventas.set_value("Cargando…", "Total vendido")
-        self.kpi_compras.set_value("Cargando…", "Total comprado")
-        self.kpi_topprod.set_value("Cargando…", "")
-        self.kpi_stock.set_value("—", "…")
-
-        # 2) KPIs en segundo plano
-        self._start_thread_job(
-            "kpis",
-            self._compute_kpis,
-            lambda res, err, jid: self._on_kpis_ready(res) if err is None else print("[Dashboard] KPI error:", err)
-        )
-
-        # 3) Programar construcción incremental de gráficos en el hilo de GUI
-        self._start_build_figures_incrementally(force=True)
-
-        # 4) Clima
+        try:
+            data = self._compute_kpis()
+        except Exception as e:
+            print("[Dashboard] KPI sync error:", e)
+            data = {"ventas": 0, "compras": 0, "top": None, "crit": 0}
+        try:
+            self._on_kpis_ready(data)
+        except Exception as e:
+            print("[Dashboard] KPI render error:", e)
+            try:
+                self.kpi_ventas.set_value(self._fmt_currency(0.0), "Total vendido")
+                self.kpi_compras.set_value(self._fmt_currency(0.0), "Total comprado")
+                self.kpi_topprod.set_value("—", "Sin ventas en el mes")
+                self.kpi_stock.set_value("0", "productos en nivel crítico")
+            except Exception:
+                pass
         QTimer.singleShot(200, lambda: self.weather.refresh_default_city())
 
-    # --- KPIs en worker ---
     def _compute_kpis(self):
         eng = _get_engine_cached()
-        ini, fin = None, None
+        ventas = compras = crit = 0
+        top_row = None
         try:
             with eng.connect() as con:
                 row = con.execute(_SQL_MONTH_BOUNDS).mappings().first()
                 ini, fin = row['ini'], row['fin']
-
-                ventas = con.execute(_SQL_KPI_VENTAS, {'ini': ini, 'fin': fin}).scalar() or 0
-                compras = con.execute(_SQL_KPI_COMPRAS, {'ini': ini, 'fin': fin}).scalar() or 0
-                top_row = con.execute(_SQL_KPI_TOP_PROD, {'ini': ini, 'fin': fin}).mappings().first()
-                crit = con.execute(_SQL_KPI_CRITICOS).scalar() or 0
+                try:
+                    ventas = con.execute(_SQL_KPI_VENTAS, {'ini': ini, 'fin': fin}).scalar() or 0
+                except Exception:
+                    ventas = 0
+                try:
+                    compras = con.execute(_SQL_KPI_COMPRAS, {'ini': ini, 'fin': fin}).scalar() or 0
+                except Exception:
+                    compras = 0
+                try:
+                    top_row = con.execute(_SQL_KPI_TOP_PROD, {'ini': ini, 'fin': fin}).mappings().first()
+                except Exception:
+                    top_row = None
+                try:
+                    crit = con.execute(_SQL_KPI_CRITICOS).scalar() or 0
+                except Exception:
+                    crit = 0
         except Exception as e:
             print("[Dashboard] KPI error:", e)
-            ventas = compras = crit = 0
-            top_row = None
         return {
-            "ventas": ventas,
-            "compras": compras,
-            "top": (top_row['nombre'], int(top_row['u'])) if top_row else None,
-            "crit": crit
+            "ventas": float(ventas or 0),
+            "compras": float(compras or 0),
+            "top": ( (top_row.get('nombre'), int(top_row.get('u', 0))) if (top_row and top_row.get('nombre')) else None ),
+            "crit": int(crit or 0)
         }
 
     def _on_kpis_ready(self, data: dict):
-        if getattr(self, "_shutting_down", False) or not self.isVisible():
-            return
         try:
-            self.kpi_ventas.set_value(self._fmt_currency(float(data.get("ventas", 0))), "Total vendido")
-            self.kpi_compras.set_value(self._fmt_currency(float(data.get("compras", 0))), "Total comprado")
-            top = data.get("top")
-            if top:
-                nombre, u = top
-                self.kpi_topprod.set_value(f"{nombre}", f"{int(u)} u. vendidas")
+            ventas  = float(data.get("ventas", 0) or 0)
+            compras = float(data.get("compras", 0) or 0)
+            top     = data.get("top")
+            crit    = int(data.get("crit", 0) or 0)
+            self.kpi_ventas.set_value(self._fmt_currency(ventas), "Total vendido")
+            self.kpi_compras.set_value(self._fmt_currency(compras), "Total comprado")
+            if top and isinstance(top, (tuple, list)) and top[0]:
+                nombre, u = top[0], int(top[1] or 0)
+                self.kpi_topprod.set_value(f"{nombre}", f"{u} u. vendidas")
             else:
                 self.kpi_topprod.set_value("—", "Sin ventas en el mes")
-            self.kpi_stock.set_value(str(int(data.get("crit", 0))), "productos en nivel crítico")
+            self.kpi_stock.set_value(str(crit), "productos en nivel crítico")
         except Exception as e:
             print("[Dashboard] KPI render error:", e)
-
-    # --- Gráficos incremental en hilo de GUI (evita crash por Qt en hilos) ---
-    def _start_build_figures_incrementally(self, force: bool = False):
-        if getattr(self, "_shutting_down", False):
-            return
-        # si ya hay cache y no se fuerza, reusar
-        if (self._fig_cache_ready and self._fig_cache) and not force:
-            self.carousel.set_figures(self._fig_cache[:-1])
-            self.card_right.set_figure(self._fig_cache[-1])
-            return
-
-        # reiniciar cola y resultados
-        self._figs_built = []
-        self._fig_queue = [
-            lambda: create_ventas_vs_compras_mensuales(meses=12),
-            lambda: create_gastos_mensuales(meses=12),
-            lambda: create_presupuesto_vs_gasto_por_obra(top_n=10),
-            lambda: create_top_materiales_mes(dias=30, limit=10),
-            lambda: create_stock_critico(limit=10),
-            # derecha:
-            lambda: create_distribucion_gastos_por_tipo(),
-        ]
-        # arrancar
-        QTimer.singleShot(0, self._build_next_figure)
-
-    def _build_next_figure(self):
-        if getattr(self, "_shutting_down", False) or not self.isVisible():
-            return
-        if not self._fig_queue:
-            # Terminado: cache y montar
-            if self._figs_built:
-                self._fig_cache = self._figs_built[:]
-                self._fig_cache_ready = True
-                try:
-                    self.carousel.set_figures(self._fig_cache[:-1])
-                    self.card_right.set_figure(self._fig_cache[-1])
-                except Exception as e:
-                    print("[Dashboard] Error al montar figuras (final):", e)
-            return
-
-        # tomar siguiente creador y construir en GUI
-        fn = self._fig_queue.pop(0)
-        try:
-            fig = fn()
-            if fig is not None:
-                self._figs_built.append(fig)
-
-                # montaje progresivo: mostrar lo que ya hay
-                if len(self._figs_built) >= 1:
-                    try:
-                        carr = self._figs_built[:-1] if len(self._figs_built) < 6 else self._figs_built[:-1]
-                        if carr:
-                            self.carousel.set_figures(carr)
-                        if len(self._figs_built) == 6:
-                            self.card_right.set_figure(self._figs_built[-1])
-                    except Exception as e:
-                        print("[Dashboard] Error al montar figuras (parcial):", e)
-        except Exception as e:
-            print("[Dashboard] Error generando figura:", e)
-
-        # continuar con la siguiente en la cola
-        QTimer.singleShot(0, self._build_next_figure)
-
+            self.kpi_ventas.set_value(self._fmt_currency(0.0), "Total vendido")
+            self.kpi_compras.set_value(self._fmt_currency(0.0), "Total comprado")
+            self.kpi_topprod.set_value("—", "Sin ventas en el mes")
+            self.kpi_stock.set_value("0", "productos en nivel crítico")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

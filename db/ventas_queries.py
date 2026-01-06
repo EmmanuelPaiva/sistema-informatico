@@ -4,10 +4,11 @@ from PySide6.QtWidgets import (
     QComboBox, QTableWidgetItem, QPushButton, QWidget, QTreeWidgetItem, QHBoxLayout, QMessageBox, QSpinBox
 )
 from PySide6.QtGui import QColor, QBrush, QFont
-from PySide6.QtCore import Qt, QDateTime
+from PySide6.QtCore import Qt, QDateTime, QSize
 from utils.utilsVentas import calcular_total_general
 from functools import partial
-
+from forms.ui_helpers import style_edit_button, style_delete_button
+from utils.normNumbers import formatear_numero
 
 # ---------------------------
 # Helpers locales (no rompen lógica)
@@ -65,7 +66,7 @@ def guardar_venta_en_db(ui_nueva_venta, ui, Form):
         rows = ui_nueva_venta.tableWidget.rowCount()
         for row in range(rows):
             item_subtotal = ui_nueva_venta.tableWidget.item(row, 3)
-            sub = float(item_subtotal.text()) if item_subtotal and item_subtotal.text() else 0.0
+            sub = item_subtotal.data(Qt.UserRole) if item_subtotal else 0.0
             total += sub
             spin = ui_nueva_venta.tableWidget.cellWidget(row, 1)
             if spin:
@@ -93,8 +94,8 @@ def guardar_venta_en_db(ui_nueva_venta, ui, Form):
 
             id_producto = combo.currentData()
             cantidad = int(spin.value())
-            precio_unitario = float(item_precio.text() or 0)
-            subtotal = float(item_subtotal.text() or 0)
+            precio_unitario = item_precio.data(Qt.UserRole) or 0.0
+            subtotal = item_subtotal.data(Qt.UserRole) or 0.0
 
             cur.execute(
                 """
@@ -117,6 +118,8 @@ def guardar_venta_en_db(ui_nueva_venta, ui, Form):
             pass
         ui.treeWidget.clear()
         cargar_ventas(ui, Form)
+        if hasattr(ui, "_post_refresh"):
+            ui._post_refresh()
         if hasattr(ui, 'formulario_nueva_venta'):
             ui.formulario_nueva_venta.close()
 
@@ -124,92 +127,81 @@ def guardar_venta_en_db(ui_nueva_venta, ui, Form):
 # ==========================================
 # Agregar primera fila al formulario
 # ==========================================
-def agregar_filas(ui_nueva_venta):
+def agregar_filas(ui):
+
     con = conexion()
     cur = con.cursor()
-    try:
-        _ensure_product_cache(ui_nueva_venta, cur)
-    finally:
-        cur.close()
-        con.close()
 
-    row = ui_nueva_venta.tableWidget.rowCount()
-    ui_nueva_venta.tableWidget.insertRow(row)
+    _ensure_product_cache(ui, cur)
+    table = ui.tableWidget
 
-    # Combo de productos (una sola carga desde cache)
+    row = table.rowCount()
+    table.insertRow(row)
+
+    # =========================
+    # Combo de productos
+    # =========================
     combo = QComboBox()
     combo.addItem("Seleccione", None)
-    for pid, nombre, _precio in ui_nueva_venta._productos_lista:
+    for pid, nombre, _precio in ui._productos_lista:
         combo.addItem(nombre, pid)
-    ui_nueva_venta.tableWidget.setCellWidget(row, 0, combo)
+    table.setCellWidget(row, 0, combo)
 
+    # =========================
     # Cantidad
+    # =========================
     spin = QSpinBox()
     spin.setMinimum(1)
     spin.setMaximum(999)
-    ui_nueva_venta.tableWidget.setCellWidget(row, 1, spin)
+    table.setCellWidget(row, 1, spin)
 
-    # Precio (no editable)
-    item_precio = QTableWidgetItem("0")
-    _set_no_edit(item_precio, "0")
-    ui_nueva_venta.tableWidget.setItem(row, 2, item_precio)
+    # =========================
+    # Precio unitario (EDITABLE)
+    # =========================
+    item_precio = QTableWidgetItem(formatear_numero(0))
+    item_precio.setData(Qt.UserRole, 0.0)
+    item_precio.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+    table.setItem(row, 2, item_precio)
 
-    # Subtotal (no editable)
-    item_subtotal = QTableWidgetItem("0")
-    _set_no_edit(item_subtotal, "0")
-    ui_nueva_venta.tableWidget.setItem(row, 3, item_subtotal)
+    # =========================
+    # Subtotal (NO editable)
+    # =========================
+    item_sub = QTableWidgetItem(formatear_numero(0))
+    item_sub.setData(Qt.UserRole, 0.0)
+    item_sub.setFlags(item_sub.flags() & ~Qt.ItemIsEditable)
+    item_sub.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+    table.setItem(row, 3, item_sub)
 
-    # Eventos (absorbiendo argumentos extra de la señal)
-    combo.currentIndexChanged.connect(partial(actualizar_subtotal, row, ui_nueva_venta))
-    spin.valueChanged.connect(partial(actualizar_subtotal, row, ui_nueva_venta))
-    combo.currentIndexChanged.connect(lambda *_: calcular_total_general(ui_nueva_venta))
-    spin.valueChanged.connect(lambda *_: calcular_total_general(ui_nueva_venta))
+    # =========================
+    # Señales
+    # =========================
+    combo.currentIndexChanged.connect(
+        partial(on_producto_changed, row, ui)
+    )
+
+    spin.valueChanged.connect(
+        partial(actualizar_subtotal, row, ui)
+    )
 
 
-# ==========================================
-# Botón "Agregar producto" (nuevas filas)
-# ==========================================
-def agrega_prodcuto_a_fila(ui_nueva_venta):
-    con = conexion()
-    cur = con.cursor()
-    try:
-        _ensure_product_cache(ui_nueva_venta, cur)
-    finally:
-        cur.close()
-        con.close()
+def _on_item_changed(item, ui):
+    if ui._bloqueando_item_changed:
+        return
 
-    row = ui_nueva_venta.tableWidget.rowCount()
-    ui_nueva_venta.tableWidget.insertRow(row)
+    if item.column() == 2:  # precio
+        texto = item.text().strip()
 
-    combo = QComboBox()
-    combo.addItem("Seleccione", None)
-    for pid, nombre, _precio in ui_nueva_venta._productos_lista:
-        combo.addItem(nombre, pid)
-    ui_nueva_venta.tableWidget.setCellWidget(row, 0, combo)
+        try:
+            valor = float(texto.replace(".", "").replace(",", "."))
+        except ValueError:
+            valor = 0.0
 
-    spin = QSpinBox()
-    spin.setMinimum(1)
-    spin.setMaximum(999)
-    ui_nueva_venta.tableWidget.setCellWidget(row, 1, spin)
+        ui._bloqueando_item_changed = True
+        item.setData(Qt.UserRole, valor)
+        item.setText(formatear_numero(valor))
+        ui._bloqueando_item_changed = False
 
-    # Precio inicial (si hay selección válida)
-    precio_unitario_valor = 0.0
-    sel_pid = combo.currentData()
-    if sel_pid is not None:
-        precio_unitario_valor = ui_nueva_venta._precio_por_id.get(sel_pid, 0.0)
-
-    item_precio = QTableWidgetItem(f"{precio_unitario_valor:.2f}")
-    _set_no_edit(item_precio, f"{precio_unitario_valor:.2f}")
-    ui_nueva_venta.tableWidget.setItem(row, 2, item_precio)
-
-    item_subtotal = QTableWidgetItem("0")
-    _set_no_edit(item_subtotal, "0")
-    ui_nueva_venta.tableWidget.setItem(row, 3, item_subtotal)
-
-    combo.currentIndexChanged.connect(partial(actualizar_subtotal, row, ui_nueva_venta))
-    spin.valueChanged.connect(partial(actualizar_subtotal, row, ui_nueva_venta))
-    combo.currentIndexChanged.connect(lambda *_: calcular_total_general(ui_nueva_venta))
-    spin.valueChanged.connect(lambda *_: calcular_total_general(ui_nueva_venta))
+        actualizar_subtotal(item.row(), ui)
 
 
 # ==========================================
@@ -224,7 +216,7 @@ def cargar_ventas(ui, Form):
     cur = con.cursor()
     try:
         cur.execute("""
-            SELECT v.id_venta, v.fecha_venta, c.nombre, v.cantidad, v.total_venta, v.medio_pago
+            SELECT v.id_venta, v.fecha_venta, c.nombre, v.total_venta, v.medio_pago
             FROM ventas v
             JOIN clientes c ON v.id_cliente = c.id
             ORDER BY v.fecha_venta DESC;
@@ -253,15 +245,14 @@ def cargar_ventas(ui, Form):
 
         # Poblar árbol
         for venta in ventas:
-            id_venta, fecha, cliente, cantidad, total, medio = venta
+            id_venta, fecha, cliente, total, medio = venta
             item_venta = QTreeWidgetItem()
             item_venta.setText(0, str(id_venta))
             item_venta.setText(1, fecha.strftime("%Y-%m-%d %H:%M:%S") if hasattr(fecha, "strftime") else str(fecha))
             item_venta.setText(2, str(cliente))
-            item_venta.setText(3, str(cantidad))
-            item_venta.setText(4, f"{float(total):.2f}")
-            item_venta.setText(5, medio or "")
-            item_venta.setText(6, "")  # factura (si no usas)
+            item_venta.setText(3, formatear_numero(total))
+            item_venta.setText(4, medio or "")
+            item_venta.setText(5, "")  # factura (si no usas)
 
             ui.treeWidget.addTopLevelItem(item_venta)
 
@@ -286,8 +277,8 @@ def cargar_ventas(ui, Form):
                 item_sub = QTreeWidgetItem()
                 item_sub.setText(1, str(nombre_prod))
                 item_sub.setText(2, str(cant))
-                item_sub.setText(3, f"{float(precio):.2f}")
-                item_sub.setText(4, f"{float(sub):.2f}")
+                item_sub.setText(3, formatear_numero(precio))
+                item_sub.setText(4, formatear_numero(sub))
                 item_venta.addChild(item_sub)
 
             # Botones una sola vez
@@ -424,12 +415,12 @@ def editar_venta(item_venta, ui, Form):
             ui_nueva_venta.tableWidget.setCellWidget(i, 1, spin)
 
             # celdas calculadas; se recalculan con actualizar_subtotal
-            item_precio = QTableWidgetItem(f"{float(precio_u or 0):.2f}")
-            _set_no_edit(item_precio, f"{float(precio_u or 0):.2f}")
+            item_precio = QTableWidgetItem(formatear_numero(precio_u))
+            _set_no_edit(item_precio, formatear_numero(precio_u))
             ui_nueva_venta.tableWidget.setItem(i, 2, item_precio)
 
-            item_sub = QTableWidgetItem(f"{float(sub or 0):.2f}")
-            _set_no_edit(item_sub, f"{float(sub or 0):.2f}")
+            item_sub = QTableWidgetItem(formatear_numero(sub))
+            _set_no_edit(item_sub, formatear_numero(sub))
             ui_nueva_venta.tableWidget.setItem(i, 3, item_sub)
 
             combo.currentIndexChanged.connect(partial(actualizar_subtotal, i, ui_nueva_venta))
@@ -459,43 +450,60 @@ def cargar_detalles_venta(id_venta, ui):
     pass
 
 
-# ==========================================
-# Subtotales (SIN ir a DB por fila)
-# ==========================================
 def actualizar_subtotal(row, ui, *_):
-    """
-    Absorbe argumentos extra de señales (p.ej. índice del combo o valor del spin)
-    gracias al comodín *_ para evitar TypeError.
-    """
     try:
-        combo = ui.tableWidget.cellWidget(row, 0)
-        spin = ui.tableWidget.cellWidget(row, 1)
-        if combo is None or spin is None:
+        table = ui.tableWidget
+
+        combo = table.cellWidget(row, 0)
+        spin = table.cellWidget(row, 1)
+        item_precio = table.item(row, 2)
+        item_sub = table.item(row, 3)
+
+        if not (combo and spin and item_precio and item_sub):
             return
 
-        id_producto = combo.currentData()
-        if id_producto is None:
-            # reset celdas
-            ui.tableWidget.setItem(row, 2, QTableWidgetItem("0"))
-            ui.tableWidget.setItem(row, 3, QTableWidgetItem("0"))
-            calcular_total_general(ui)
-            return
+        # Cantidad
+        cantidad = spin.value()
 
-        # Usar cache de precios (cargada en agregar_filas/editar_venta)
-        precio_unitario = 0.0
-        if hasattr(ui, "_precio_por_id") and ui._precio_por_id:
-            precio_unitario = float(ui._precio_por_id.get(id_producto, 0.0))
+        # Precio unitario (SIEMPRE desde UserRole)
+        precio_unitario = item_precio.data(Qt.UserRole)
+        if precio_unitario is None:
+            precio_unitario = 0.0
 
-        cantidad = int(spin.value())
+        # Subtotal real
         subtotal = precio_unitario * cantidad
 
-        ui.tableWidget.setItem(row, 2, QTableWidgetItem(f"{precio_unitario:.2f}"))
-        ui.tableWidget.setItem(row, 3, QTableWidgetItem(f"{subtotal:.2f}"))
+        # Bloqueo de señales
+        ui._bloqueando_item_changed = True
+
+        item_sub.setData(Qt.UserRole, subtotal)
+        item_sub.setText(formatear_numero(subtotal))
+
+        ui._bloqueando_item_changed = False
 
         calcular_total_general(ui)
 
     except Exception as e:
         print(f"[actualizar_subtotal] Error fila {row}: {e}")
+
+
+def on_producto_changed(row, ui, *_):
+    combo = ui.tableWidget.cellWidget(row, 0)
+    item_precio = ui.tableWidget.item(row, 2)
+
+    if not combo or not item_precio:
+        return
+
+    pid = combo.currentData()
+    if pid is None:
+        return
+
+    precio = ui._precio_por_id.get(pid, 0.0)
+
+    item_precio.setData(Qt.UserRole, precio)
+    item_precio.setText(formatear_numero(precio))
+
+    actualizar_subtotal(row, ui)
 
 
 # ==========================================
@@ -506,22 +514,25 @@ def agregar_botones_opciones(treeWidget, item_venta, ui, Form):
     layout = QHBoxLayout()
     layout.setContentsMargins(0, 0, 0, 0)
 
-    btn_editar = QPushButton("Editar")
+    btn_editar = QPushButton()
     btn_editar.setObjectName("btnVentaEditar")               # PATCH permisos
     btn_editar.setProperty("perm_code", "ventas.update")
+    btn_editar.setFixedHeight(25)
+    btn_editar.setIconSize(QSize(18, 18))
+    style_edit_button(btn_editar, "Editar venta")
 
-    btn_eliminar = QPushButton("Eliminar")
+    btn_eliminar = QPushButton()
     btn_eliminar.setObjectName("btnVentaEliminar")           # PATCH permisos
     btn_eliminar.setProperty("perm_code", "ventas.delete")
-
-    btn_editar.setFixedHeight(25)
     btn_eliminar.setFixedHeight(25)
+    btn_eliminar.setIconSize(QSize(18, 18))
+    style_delete_button(btn_eliminar, "Eliminar venta")
 
     layout.addWidget(btn_editar)
     layout.addWidget(btn_eliminar)
     widget.setLayout(layout)
 
-    treeWidget.setItemWidget(item_venta, 7, widget)
+    treeWidget.setItemWidget(item_venta, 6, widget)
 
     btn_editar.clicked.connect(lambda: editar_venta(item_venta, ui, Form))
     btn_eliminar.clicked.connect(lambda: eliminar_venta(ui.treeWidget, item_venta))
@@ -551,8 +562,8 @@ def actualizar_venta_en_db(ui_nueva_venta, id_venta, ui, Form):
             cantidad = int(spin.value())
             cantidad_total += cantidad
 
-            precio_unitario = float(ui_nueva_venta.tableWidget.item(row, 2).text() or 0)
-            subtotal = float(ui_nueva_venta.tableWidget.item(row, 3).text() or 0)
+            precio_unitario = ui_nueva_venta.tableWidget.item(row, 2).data(Qt.UserRole) or 0.0
+            subtotal = ui_nueva_venta.tableWidget.item(row, 3).data(Qt.UserRole) or 0.0
 
             cur.execute(
                 """
@@ -581,6 +592,8 @@ def actualizar_venta_en_db(ui_nueva_venta, id_venta, ui, Form):
 
         ui.treeWidget.clear()
         cargar_ventas(ui, Form)
+        if hasattr(ui, "_post_refresh"):
+            ui._post_refresh()
         if hasattr(ui, 'formulario_nueva_venta'):
             ui.formulario_nueva_venta.close()
 
@@ -604,7 +617,7 @@ def buscar_ventas(ui, criterio, Form):
     try:
         if not criterio:
             cur.execute("""
-                SELECT v.id_venta, c.nombre, v.fecha_venta, v.total_venta, v.medio_pago, v.cantidad
+                SELECT v.id_venta, c.nombre, v.fecha_venta, v.total_venta, v.medio_pago
                 FROM ventas v
                 JOIN clientes c ON v.id_cliente = c.id
                 ORDER BY v.fecha_venta DESC;
@@ -612,7 +625,7 @@ def buscar_ventas(ui, criterio, Form):
         else:
             like = f"%{criterio}%"
             cur.execute("""
-                SELECT v.id_venta, c.nombre, v.fecha_venta, v.total_venta, v.medio_pago, v.cantidad
+                SELECT v.id_venta, c.nombre, v.fecha_venta, v.total_venta, v.medio_pago
                 FROM ventas v
                 JOIN clientes c ON v.id_cliente = c.id
                 WHERE c.nombre ILIKE %s
@@ -641,13 +654,12 @@ def buscar_ventas(ui, criterio, Form):
         for id_venta, nombre_producto, cant, precio_u, sub in det_rows:
             det_map.setdefault(id_venta, []).append((nombre_producto, cant, precio_u, sub))
 
-        for id_venta, cliente, fecha, total, medio_pago, cantidad in ventas:
+        for id_venta, cliente, fecha, total, medio_pago in ventas:
             item = QTreeWidgetItem([
                 str(id_venta),
                 fecha.strftime("%Y-%m-%d %H:%M:%S") if hasattr(fecha, "strftime") else str(fecha),
                 cliente,
-                str(cantidad),
-                f"{float(total):.2f}",
+                formatear_numero(total),
                 medio_pago or "",
                 "",   # factura
                 ""    # opciones (widget)
@@ -658,7 +670,7 @@ def buscar_ventas(ui, criterio, Form):
             for nombre_producto, cant, precio_u, sub in det_map.get(id_venta, []):
                 det = QTreeWidgetItem([
                     "", nombre_producto, str(cant),
-                    f"{float(precio_u):.2f}", f"{float(sub):.2f}"
+                    formatear_numero(precio_u), formatear_numero(sub)
                 ])
                 item.addChild(det)
     finally:

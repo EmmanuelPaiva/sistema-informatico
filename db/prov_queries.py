@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 from PySide6.QtWidgets import QMessageBox, QTableWidgetItem, QPushButton, QHBoxLayout, QWidget
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QSize
 from functools import partial
 from db.conexion import conexion
+from forms.ui_helpers import style_edit_button, style_delete_button
 
 
 def guardar_registro(ui_nuevo_proveedor, form_widget, tableWidget, edit_callback, main_form_widget):
@@ -101,23 +102,17 @@ def cargar_proveedores(tableWidget, edit_callback=None, main_form_widget=None):
             layout.setAlignment(Qt.AlignCenter)
             layout.setContentsMargins(0, 0, 0, 0)
 
-            boton_editar = QPushButton("Editar")
-            # Permission identifiers
+            boton_editar = QPushButton()
             boton_editar.setObjectName("btnProveedorEditar")
             boton_editar.setProperty("perm_code", "proveedores.update")  
-            boton_editar.setProperty("type", "primary")
-            boton_editar.setCursor(Qt.PointingHandCursor)
-            boton_editar.style().unpolish(boton_editar); boton_editar.style().polish(boton_editar)
-            boton_editar.style().unpolish(boton_editar); boton_editar.style().polish(boton_editar)
+            boton_editar.setIconSize(QSize(18, 18))
+            style_edit_button(boton_editar, "Editar proveedor")
 
-            boton_eliminar = QPushButton("Eliminar")
-            # Permission identifiers
+            boton_eliminar = QPushButton()
             boton_eliminar.setObjectName("btnProveedorEliminar")
             boton_eliminar.setProperty("perm_code", "proveedores.delete")  
-            boton_eliminar.setProperty("type", "danger")
-            boton_eliminar.setCursor(Qt.PointingHandCursor)
-            boton_eliminar.style().unpolish(boton_eliminar); boton_eliminar.style().polish(boton_eliminar)
-            boton_eliminar.style().unpolish(boton_eliminar); boton_eliminar.style().polish(boton_eliminar)
+            boton_eliminar.setIconSize(QSize(18, 18))
+            style_delete_button(boton_eliminar, "Eliminar proveedor")
 
             layout.addWidget(boton_editar)
             layout.addWidget(boton_eliminar)
@@ -196,17 +191,17 @@ def buscar_proveedores(nombre, tableWidget, edit_callback=None, main_form_widget
             layout.setAlignment(Qt.AlignCenter)
             layout.setContentsMargins(0, 0, 0, 0)
 
-            boton_editar = QPushButton("Editar")
+            boton_editar = QPushButton()
             boton_editar.setObjectName("btnProveedorEditar")                # PATCH permisos
             boton_editar.setProperty("perm_code", "proveedores.update")  
-            boton_editar.setProperty("type", "primary")
-            boton_editar.setCursor(Qt.PointingHandCursor)
+            boton_editar.setIconSize(QSize(18, 18))
+            style_edit_button(boton_editar, "Editar proveedor")
 
-            boton_eliminar = QPushButton("Eliminar")
+            boton_eliminar = QPushButton()
             boton_eliminar.setObjectName("btnProveedorEliminar")            # PATCH permisos
             boton_eliminar.setProperty("perm_code", "proveedores.delete")  
-            boton_eliminar.setProperty("type", "danger")
-            boton_eliminar.setCursor(Qt.PointingHandCursor)
+            boton_eliminar.setIconSize(QSize(18, 18))
+            style_delete_button(boton_eliminar, "Eliminar proveedor")
 
             layout.addWidget(boton_editar)
             layout.addWidget(boton_eliminar)

@@ -238,7 +238,7 @@ class Ui_MainWindow(object):
         layout_outer.setContentsMargins(60, 40, 60, 40)
         layout_outer.setSpacing(20)
 
-        self.lblLogoText = QLabel("RODLER", self.content)
+        self.lblLogoText = QLabel("RODLERE", self.content)
         self.lblLogoText.setObjectName("title")
         self.lblLogoText.setAlignment(Qt.AlignCenter)
         self.lblLogoText.setContentsMargins(0, 0, 0, 0)
