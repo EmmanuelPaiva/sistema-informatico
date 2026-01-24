@@ -88,7 +88,9 @@ def agrega_prodcuto_a_fila(ui_nueva_compra):
     ui_nueva_compra.tableWidget.insertRow(row)
 
     combo = QComboBox()
+    combo.setEnabled(True)
     ui_nueva_compra.tableWidget.setCellWidget(row, 0, combo)
+
     combo.currentIndexChanged.connect(
         lambda *_: _actualizar_tooltip_producto(combo)
     )
@@ -104,7 +106,11 @@ def agrega_prodcuto_a_fila(ui_nueva_compra):
         combo.addItem(nombrep, pid)
 
     # cantidad
-    spin = QSpinBox(); spin.setMinimum(1); spin.setMaximum(999)
+    
+    spin = QSpinBox()
+    spin.setMinimum(1)
+    spin.setMaximum(999)
+    spin.setEnabled(True)
     ui_nueva_compra.tableWidget.setCellWidget(row, 1, spin)
 
     # precio / subtotal iniciales (no editables)

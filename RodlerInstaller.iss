@@ -1,10 +1,10 @@
 [Setup]
 AppName=Sistema Rodler
-AppVersion=1.0.0
+AppVersion=1.1.2
 DefaultDirName={pf}\Rodler
 DefaultGroupName=Rodler
 OutputDir=installer
-OutputBaseFilename=Rodler_Setup
+OutputBaseFilename=Rodler_Setup_v1_1_2
 SetupIconFile=rodlerIcons\app_logo.ico
 Compression=lzma
 SolidCompression=yes

@@ -1,5 +1,5 @@
-BASE_DIR = C:\Users\petro\Documents\GitHub\sistema-informatico
-CONFIG_PATH = C:\Users\petro\Documents\GitHub\sistema-informatico\config.ini
+BASE_DIR = c:\Users\petro\OneDrive\Documentos\GitHub\sistema-informatico
+CONFIG_PATH = c:\Users\petro\OneDrive\Documentos\GitHub\sistema-informatico\config.ini
 Contenido de BASE_DIR:
   - .env
   - .git
@@ -10,6 +10,7 @@ Contenido de BASE_DIR:
   - config.ini
   - db
   - db_debug.txt
+  - dist
   - forms
   - graficos
   - main

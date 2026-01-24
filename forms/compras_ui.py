@@ -188,16 +188,7 @@ class Ui_Form(object):
             view = QListView(combo)
             view.setUniformItemSizes(True)
             view.setAlternatingRowColors(False)
-            view.setStyleSheet(
-                "QListView{ background: palette(base); color: palette(text); border: 1px solid palette(mid); padding: 0; margin: 0; }"
-                "QListView::item{ padding: 6px 8px; }"
-                "QListView::item:selected{ background: palette(highlight); color: palette(highlighted-text); }"
-            )
             combo.setView(view)
-            combo.setStyleSheet(
-                "QComboBox{ background: palette(base); color: palette(text); }"
-                "QComboBox QAbstractItemView{ background: palette(base); color: palette(text); }"
-            )
             combo.setFrame(True)
         except Exception:
             pass
@@ -215,14 +206,13 @@ class Ui_Form(object):
             if combo is not None:
                 combo.setContentsMargins(0, 0, 0, 0)
                 combo.setMinimumHeight(36)
-                combo.setStyleSheet("")
+  
                 self._fix_combo_popup(combo)
             spin = tw.cellWidget(r, 1)
             if spin is not None:
                 spin.setContentsMargins(0, 0, 0, 0)
                 spin.setMinimumHeight(36)
-                spin.setStyleSheet("")
-                spin.setStyleSheet("QAbstractSpinBox{ background: palette(base); color: palette(text); }")
+      
         prev = tw.styleSheet() or ""
         tw.setStyleSheet(prev + "\nQTableWidget::item{ padding: 0; margin: 0; }\n")
 
@@ -305,29 +295,35 @@ class Ui_Form(object):
                     cur.execute("SELECT id_proveedor, nombre FROM proveedores ORDER BY nombre;")
                     proveedores = cur.fetchall()
 
-                self.ui_nueva_compra.comboBox.clear()
+                cb = self.ui_nueva_compra.comboBox
+                cb.blockSignals(True)
+                cb.clear()
+
                 for idP, nombreP in proveedores:
-                    self.ui_nueva_compra.comboBox.addItem(nombreP, idP)
+                    cb.addItem(nombreP, idP)
 
-                if self.ui_nueva_compra.comboBox.count() > 0:
-                    self.ui_nueva_compra.comboBox.setCurrentIndex(0)
+                if cb.count() > 0:
+                    cb.setCurrentIndex(0)
 
-                # 🔹 Inicializar proveedor activo
-                proveedor_id = self.ui_nueva_compra.comboBox.currentData()
-                if proveedor_id is not None:
-                    _ensure_producto_cache(self.ui_nueva_compra, proveedor_id)
-                    on_proveedor_selected(self.ui_nueva_compra)
+                cb.blockSignals(False)
 
-                # 🔹 Conectar señales (una sola vez)
-                self.ui_nueva_compra.comboBox.currentIndexChanged.connect(
+                def init_proveedor():
+                    proveedor_id = cb.currentData()
+                    if proveedor_id is not None:
+                        _ensure_producto_cache(self.ui_nueva_compra, proveedor_id)
+                        on_proveedor_selected(self.ui_nueva_compra)
+                        reiniciar_tabla_productos(self.ui_nueva_compra)
+                        self._inflate_form_table(self.ui_nueva_compra)
+
+                QTimer.singleShot(0, init_proveedor)
+
+                cb.currentIndexChanged.connect(
                     lambda: (
                         reiniciar_tabla_productos(self.ui_nueva_compra),
                         on_proveedor_selected(self.ui_nueva_compra),
                         self._inflate_form_table(self.ui_nueva_compra)
                     )
                 )
-
-                self._inflate_form_table(self.ui_nueva_compra)
 
             except Exception as e:
                 print(f"Error cargando proveedores: {e}")
@@ -528,6 +524,13 @@ class Ui_Form(object):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    app.setStyleSheet("""
+    QToolTip {
+        color: white;
+        background-color: #2b2b2b;
+        border: 1px solid #555;
+    }
+    """)
     Form = QWidget()
     ui = Ui_Form()
     ui.setupUi(Form)

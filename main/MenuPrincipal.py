@@ -35,6 +35,7 @@ from graficos.graficos_dashboard2 import (
 )
 from graficos import graficos_style as gs
 from forms.weather_panel import DashboardWeatherPanel
+from db.conexion import get_conn
 
 _ENGINE_SINGLETON = None
 def _get_engine_cached():
@@ -488,7 +489,7 @@ class MenuPrincipal(QWidget):
         QTimer.singleShot(0, self._refresh_inicio_data_async)
         self.newUserRequested.connect(self._on_new_user_requested)
         self.themeToggled.connect(self._on_theme_toggled)
-        self.deleteAccountRequested.connect(self._on_delete_account_requested)
+        self.deleteAccountRequested.connect(self._on_delete_account)
         if self._user_can_dashboard():
             self._ensure_inicio_visible_widgets()
             self._refresh_inicio_data_async()
@@ -1044,12 +1045,59 @@ class MenuPrincipal(QWidget):
             )
 
 
-    def _on_delete_account_requested(self):
-        if QMessageBox.question(self, "Eliminar cuenta", "¿Eliminar esta cuenta?",
-                                QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+    def _on_delete_account(self):
+        print("DELETE ACCOUNT → señal recibida")
+        resp = QMessageBox.question(
+            self,
+            "Borrar cuenta",
+            "Esta acción eliminará tu cuenta.\n\n¿Deseás continuar?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
+        if resp == QMessageBox.Yes:
+            self._delete_current_user()
+
+
+    def _delete_current_user(self):
+        print("DELETE ACCOUNT → ejecutando delete_current_user")
+
+        user_id = (self.session.get("user") or {}).get("id")
+
+        if not user_id:
+            QMessageBox.critical(
+                self,
+                "Error",
+                "No se pudo identificar el usuario actual."
+            )
             return
-        else:
-            pass
+
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE rodler_auth.users SET is_active = false WHERE id = %s",
+                (user_id,)
+            )
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"No se pudo eliminar la cuenta:\n{e}"
+            )
+            return
+        finally:
+            conn.close()
+
+        QMessageBox.information(
+            self,
+            "Cuenta eliminada",
+            "Tu cuenta fue desactivada correctamente."
+        )
+
+        self._do_logout()
 
     def _stop_all_threads(self, timeout_ms: int = 1500):
         items = list((self._threads or {}).items())

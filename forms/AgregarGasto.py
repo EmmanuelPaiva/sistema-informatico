@@ -70,7 +70,7 @@ class GastoFormWidget(QWidget):
 
         # Cantidad
         self.input_cantidad = QDoubleSpinBox()
-        self.input_cantidad.setDecimals(3)
+        self.input_cantidad.setDecimals(0)
         self.input_cantidad.setRange(0, 1_000_000)
         self.input_cantidad.setValue(1)
         form.addRow("Cantidad:", self.input_cantidad)

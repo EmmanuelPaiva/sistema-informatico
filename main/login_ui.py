@@ -22,7 +22,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtSvg import QSvgRenderer
 
 # ========= RUTAS ABSOLUTAS EXACTAS =========
-ASSET_DIR = r"c:\Users\mauri\OneDrive\Desktop\SISTEMA-INFORMATICO\rodlerIcons"
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ASSET_DIR = os.path.join(BASE_DIR, "rodlerIcons")
 IMG1 = os.path.join(ASSET_DIR, "img1.png")
 IMG2 = os.path.join(ASSET_DIR, "img2.png")
 IMG3 = os.path.join(ASSET_DIR, "img3.png")
@@ -79,6 +80,7 @@ def _db_get_user_by_username(username_lc: str):
             SELECT id, username, is_active, locked_until
             FROM rodler_auth.users
             WHERE LOWER(username) = LOWER(%s)
+              AND is_active = true
             LIMIT 1
         """, (username_lc,))
         row = cur.fetchone()
@@ -238,7 +240,7 @@ class Ui_MainWindow(object):
         layout_outer.setContentsMargins(60, 40, 60, 40)
         layout_outer.setSpacing(20)
 
-        self.lblLogoText = QLabel("RODLERE", self.content)
+        self.lblLogoText = QLabel("RODLER", self.content)
         self.lblLogoText.setObjectName("title")
         self.lblLogoText.setAlignment(Qt.AlignCenter)
         self.lblLogoText.setContentsMargins(0, 0, 0, 0)
@@ -328,6 +330,9 @@ class Ui_MainWindow(object):
 
         self.pageLogin.installEventFilter(MainWindow)
         self.stack.currentChanged.connect(MainWindow._on_stack_changed)
+
+        self.lineIdent.returnPressed.connect(MainWindow._on_user_enter)
+        self.linePass.returnPressed.connect(MainWindow._on_pass_enter)
 
         
 
@@ -432,6 +437,21 @@ class LoginMainWindow(QMainWindow):
 
         self._install_login_styles()
         self._sync_login_layers()
+
+    def _on_user_enter(self):
+        """
+        Enter en el campo Usuario:
+        pasa el foco a la contraseña
+        """
+        if self.ui.lineIdent.text().strip():
+            self.ui.linePass.setFocus()
+
+    def _on_pass_enter(self):
+        """
+        Enter en el campo Contraseña:
+        dispara el login
+        """
+        self._on_login_clicked()
 
     # ---------- Estilos blindados para el login ----------
     def _install_login_styles(self):

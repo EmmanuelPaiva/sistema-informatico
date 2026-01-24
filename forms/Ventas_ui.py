@@ -247,16 +247,7 @@ class Ui_Form(object):
             view = QListView(combo)
             view.setUniformItemSizes(True)
             view.setAlternatingRowColors(False)
-            view.setStyleSheet(
-                "QListView{ background: palette(base); color: palette(text); border: 1px solid palette(mid); padding: 0; margin: 0; }"
-                "QListView::item{ padding: 6px 8px; }"
-                "QListView::item:selected{ background: palette(highlight); color: palette(highlighted-text); }"
-            )
             combo.setView(view)
-            combo.setStyleSheet(
-                "QComboBox{ background: palette(base); color: palette(text); }"
-                "QComboBox QAbstractItemView{ background: palette(base); color: palette(text); }"
-            )
             combo.setFrame(True)
         except Exception:
             pass
@@ -281,7 +272,6 @@ class Ui_Form(object):
                 spin.setContentsMargins(0, 0, 0, 0)
                 spin.setMinimumHeight(36)
                 spin.setStyleSheet("")
-                spin.setStyleSheet("QAbstractSpinBox{ background: palette(base); color: palette(text); }")
         prev = tw.styleSheet() or ""
         tw.setStyleSheet(prev + "\nQTableWidget::item{ padding: 0; margin: 0; }\n")
 
@@ -585,6 +575,14 @@ class VentanaPrincipal(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    app.setStyleSheet("""
+    QToolTip {
+        color: white;
+        background-color: #2b2b2b;
+        border: 1px solid #555;
+    }
+    """)
+
     Form = QWidget()
     ui = Ui_Form()
     ui.setupUi(Form)

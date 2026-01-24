@@ -146,6 +146,9 @@ def agregar_filas(ui):
     for pid, nombre, _precio in ui._productos_lista:
         combo.addItem(nombre, pid)
     table.setCellWidget(row, 0, combo)
+    combo.currentIndexChanged.connect(
+        lambda *_: _actualizar_tooltip_producto(combo)
+    )
 
     # =========================
     # Cantidad
@@ -182,6 +185,10 @@ def agregar_filas(ui):
     spin.valueChanged.connect(
         partial(actualizar_subtotal, row, ui)
     )
+
+def _actualizar_tooltip_producto(combo):
+    texto = combo.currentText()
+    combo.setToolTip(texto)
 
 
 def _on_item_changed(item, ui):

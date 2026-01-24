@@ -39,7 +39,7 @@ from main.themes import themed_icon
 def icon(name: str) -> QIcon:
     return themed_icon(name)
 
-
+#cantidad .2f
 # ===== Form etapa inline (se crea solo cuando se usa)
 class EtapaFormWidget(QWidget):
     def __init__(self, on_submit, on_cancel=None, parent=None):
