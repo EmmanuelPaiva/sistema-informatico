@@ -552,7 +552,7 @@ class DetallesObraWidget(QWidget):
                                 self,
                                 "Stock insuficiente",
                                 f"No hay stock suficiente para «{prod_nombre}».\n"
-                                f"Disponible: {disponible:.2f}  •  Requerido: {cantidad:.2f}"
+                                f"Disponible: {disponible:.0f}  •  Requerido: {cantidad:.0f}"
                             )
                             return
             except Exception:

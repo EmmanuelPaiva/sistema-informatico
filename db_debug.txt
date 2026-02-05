@@ -1,5 +1,5 @@
-BASE_DIR = c:\Users\petro\OneDrive\Documentos\GitHub\sistema-informatico
-CONFIG_PATH = c:\Users\petro\OneDrive\Documentos\GitHub\sistema-informatico\config.ini
+BASE_DIR = C:\Users\petro\OneDrive\Documentos\GitHub\sistema-informatico
+CONFIG_PATH = C:\Users\petro\OneDrive\Documentos\GitHub\sistema-informatico\config.ini
 Contenido de BASE_DIR:
   - .env
   - .git
@@ -25,4 +25,4 @@ Contenido de BASE_DIR:
   - utils
   - venv
 
-DATABASE_URL = postgresql://postgres.iljziogjnkdarzutkdsh:48884368@aws-1-sa-east-1.pooler.supabase.com:6543/postgres?sslmode=require
+DATABASE_URL = postgresql://postgres.iljziogjnkdarzutkdsh:48884368Ep$@aws-1-sa-east-1.pooler.supabase.com:6543/postgres?sslmode=require
